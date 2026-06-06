@@ -9,10 +9,12 @@ from .engine import IndicatorPack
 
 def simulate_grid(ind: IndicatorPack, grid_width: float, grid_levels: int,
                   capital: float = 1000.0, rsi_limit: Optional[float] = None,
-                  regime_filter: Optional[str] = None) -> dict:
+                  regime_filter: Optional[str] = None,
+                  fee_rate: Optional[float] = None,
+                  slippage: Optional[float] = None) -> dict:
     """
-    网格策略模拟。
-    
+    网格策略模拟（含手续费 + 滑点，结果贴近实盘）。
+
     参数:
         ind:          预计算的指标包
         grid_width:   网格宽度（价格比例，如 0.02 = ±2%）
@@ -20,46 +22,69 @@ def simulate_grid(ind: IndicatorPack, grid_width: float, grid_levels: int,
         capital:      初始资金 USDT
         rsi_limit:    RSI 上限（None = 不限）
         regime_filter: 只在指定行情下建仓（None = 全天）
+        fee_rate:     单边手续费率（None → config.BACKTEST_FEE_RATE）
+        slippage:     单边滑点（None → config.BACKTEST_SLIPPAGE），买高卖低
     返回:
-        dict 含 pnl_pct, pnl, trades, win_rate 等
+        dict 含 pnl_pct, pnl, trades, win_rate, total_fees 等
     """
     n = len(ind.close)
     if n < 60:
         return {}
+
+    # 成本参数：默认从 config 读，回测因此和实盘同口径
+    if fee_rate is None or slippage is None:
+        try:
+            import config as _cfg
+            if fee_rate is None:
+                fee_rate = getattr(_cfg, "BACKTEST_FEE_RATE", 0.001)
+            if slippage is None:
+                slippage = getattr(_cfg, "BACKTEST_SLIPPAGE", 0.0005)
+        except Exception:
+            fee_rate = 0.001 if fee_rate is None else fee_rate
+            slippage = 0.0005 if slippage is None else slippage
 
     usdt = capital
     coin = 0.0
     buy_orders  = []  # [(price, size_usdt)]
     sell_orders = []  # [(price, size_coin)]
     all_trades = []
+    total_fees = 0.0
 
     for i in range(60, n):
         p_high, p_low, p_close = ind.high[i], ind.low[i], ind.close[i]
         regime = ind.regimes[i]
         rsi_now = ind.rsi[i]
 
-        # ── 成交检查：买单 ──
+        # ── 成交检查：买单（成交价含滑点上浮，到手币量扣手续费）──
         new_buys = []
         for bp, sz in buy_orders:
             if p_low <= bp and sz <= usdt:
-                amt = sz / bp
+                fill_px = bp * (1 + slippage)        # 买入滑点：实际成交略高
+                amt = sz / fill_px
+                fee = amt * fee_rate                  # 现货手续费从到手基础货币扣
+                amt -= fee
                 usdt -= sz
                 coin += amt
+                total_fees += fee * fill_px
                 sell_orders.append((bp * (1 + grid_width), amt))
-                all_trades.append({"side": "buy", "price": bp, "amt": amt})
+                all_trades.append({"side": "buy", "price": fill_px, "amt": amt})
             else:
                 new_buys.append((bp, sz))
         buy_orders = new_buys
 
-        # ── 成交检查：卖单 ──
+        # ── 成交检查：卖单（成交价含滑点下压，收入扣手续费）──
         new_sells = []
         for sp, sz in sell_orders:
             if p_high >= sp and sz <= coin:
+                fill_px = sp * (1 - slippage)         # 卖出滑点：实际成交略低
+                proceeds = sz * fill_px
+                fee = proceeds * fee_rate
                 coin -= sz
-                usdt += sz * sp
+                usdt += proceeds - fee
+                total_fees += fee
                 if rsi_limit is None or rsi_now <= rsi_limit:
-                    buy_orders.append((sp * (1 - grid_width), sz * sp))
-                all_trades.append({"side": "sell", "price": sp, "amt": sz})
+                    buy_orders.append((sp * (1 - grid_width), proceeds - fee))
+                all_trades.append({"side": "sell", "price": fill_px, "amt": sz})
             else:
                 new_sells.append((sp, sz))
         sell_orders = new_sells
@@ -96,6 +121,7 @@ def simulate_grid(ind: IndicatorPack, grid_width: float, grid_levels: int,
         "buy_trades":  len(buys),
         "sell_trades": len(sells),
         "win_rate":    round(wins / len(sells) * 100, 1) if sells else 0,
+        "total_fees":  round(total_fees, 4),
         "bars":        n,
     }
 

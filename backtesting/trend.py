@@ -20,13 +20,26 @@ def simulate_trend(ind: IndicatorPack, capital: float = 1000.0,
                    tp_pct: float = TP_PCT, sl_pct: float = SL_PCT,
                    trail_pct: float = TRAIL_PCT, rsi_ob: float = RSI_OB,
                    rsi_os: float = RSI_OS, cooldown_ticks: int = COOLDOWN,
-                   position_pct: float = POSITION_PCT) -> dict:
+                   position_pct: float = POSITION_PCT,
+                   fee_rate: float = None, slippage: float = None) -> dict:
     """
-    趋势策略模拟：只在 trending_up/down 期间开仓。
+    趋势策略模拟：只在 trending_up/down 期间开仓（含双边手续费 + 滑点）。
 
     返回:
         dict 含 pnl_pct, pnl, trades, win_rate, reasons 等
     """
+    if fee_rate is None or slippage is None:
+        try:
+            import config as _cfg
+            if fee_rate is None:
+                fee_rate = getattr(_cfg, "BACKTEST_FEE_RATE", 0.001)
+            if slippage is None:
+                slippage = getattr(_cfg, "BACKTEST_SLIPPAGE", 0.0005)
+        except Exception:
+            fee_rate = 0.001 if fee_rate is None else fee_rate
+            slippage = 0.0005 if slippage is None else slippage
+    cost_rate = fee_rate + slippage   # 单边总成本（开仓和平仓各一次）
+
     n = len(ind.close)
     usdt = capital
     pos = 0.0
@@ -52,7 +65,7 @@ def simulate_trend(ind: IndicatorPack, capital: float = 1000.0,
         if regime not in ("trending_up", "trending_down"):
             regime_active = False
             if pos > 0:
-                pnl = _pnl(pos, pos_side, entry_price, p_close)
+                pnl = _pnl(pos, pos_side, entry_price, p_close, cost_rate)
                 trades.append({"side": pos_side, "entry": entry_price, "exit": p_close,
                                "pnl": pnl, "reason": "regime_end"})
                 usdt += pos + pnl
@@ -108,7 +121,7 @@ def simulate_trend(ind: IndicatorPack, capital: float = 1000.0,
                 exit_price, reason = stop_price, "sl"
 
         if exit_price is not None:
-            pnl = _pnl(pos, pos_side, entry_price, exit_price)
+            pnl = _pnl(pos, pos_side, entry_price, exit_price, cost_rate)
             trades.append({"side": pos_side, "entry": entry_price, "exit": exit_price,
                            "pnl": pnl, "reason": reason})
             usdt += pos + pnl
@@ -118,7 +131,7 @@ def simulate_trend(ind: IndicatorPack, capital: float = 1000.0,
 
     # 强制平仓
     if pos > 0:
-        pnl = _pnl(pos, pos_side, entry_price, ind.close[-1])
+        pnl = _pnl(pos, pos_side, entry_price, ind.close[-1], cost_rate)
         trades.append({"side": pos_side, "entry": entry_price, "exit": ind.close[-1],
                        "pnl": pnl, "reason": "forced"})
         usdt += pos + pnl
@@ -147,8 +160,10 @@ def simulate_trend(ind: IndicatorPack, capital: float = 1000.0,
     }
 
 
-def _pnl(pos, side, entry, exit_price):
-    """计算平仓盈亏（USDT）"""
+def _pnl(pos, side, entry, exit_price, cost_rate=0.0):
+    """计算平仓盈亏（USDT），扣双边成本(开+平)"""
     if side == "long":
-        return pos * (exit_price - entry) / entry
-    return pos * (entry - exit_price) / entry
+        gross = pos * (exit_price - entry) / entry
+    else:
+        gross = pos * (entry - exit_price) / entry
+    return gross - pos * 2 * cost_rate

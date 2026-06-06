@@ -101,6 +101,11 @@ TOTAL_CAPITAL = float(_env("TOTAL_CAPITAL",
 SPOT_FEE_RATE    = float(_env("SPOT_FEE_RATE", "0.001"))     # 现货单边费率
 FUTURES_FEE_RATE = float(_env("FUTURES_FEE_RATE", "0.0005")) # 合约单边费率
 
+# ── 回测真实度（让优化/进化的结论可信，不被零成本假象误导）────────
+# 回测里每次成交都扣手续费 + 单边滑点；round-trip 成本 ≈ 2×(fee+slippage)。
+BACKTEST_SLIPPAGE = float(_env("BACKTEST_SLIPPAGE", "0.0005"))  # 单边滑点估计
+BACKTEST_FEE_RATE = float(_env("BACKTEST_FEE_RATE", str(SPOT_FEE_RATE)))
+
 # ── 合约参数 ───────────────────────────────────────────────────
 FUTURES_MARGIN_MODE = "isolated"   # isolated / cross
 FUTURES_DEFAULT_LEVERAGE = 5       # 默认杠杆（未被 COIN_CONFIG 覆盖时使用）
