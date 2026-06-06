@@ -41,7 +41,7 @@ _TIMEOUT = 25
 WINDOW_24H = 1
 WINDOW_7D  = 7
 
-STATE_FILE  = "ai_tuning_state.json"
+STATE_FILE  = os.path.join(os.path.dirname(__file__), "ai_tuning_state.json")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.py")
 
 # ── 参数映射 ───────────────────────────────────────────────
@@ -94,8 +94,11 @@ def _load_state() -> dict:
 
 
 def _save_state(state: dict):
-    with open(STATE_FILE, "w") as f:
+    # 原子写入，避免写到一半被中断导致 106KB 状态文件损坏
+    tmp = f"{STATE_FILE}.tmp"
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2, ensure_ascii=False, default=str)
+    os.replace(tmp, STATE_FILE)
 
 
 def _snapshot_params() -> dict:
@@ -284,9 +287,11 @@ def _quick_backtest(coin: str, param: str, old_val: float, new_val: float) -> di
     ind = calc_indicators(df)
 
     # 根据参数类型构建 sweeps
+    # 网格层数统一取该币种实际配置（TRX 用 TRX_GRID_COUNT，而非通用 GRID_COUNT）
+    cur_levels = int(_get_coin_params(coin).get("grid_count", 5))
     if param == "grid_range_pct":
-        old_r = simulate_grid(ind, grid_width=old_val, grid_levels=config.GRID_COUNT if base == "TRX" else int(_get_coin_params(coin).get("grid_count", 5)))
-        new_r = simulate_grid(ind, grid_width=new_val, grid_levels=int(_get_coin_params(coin).get("grid_count", 5)))
+        old_r = simulate_grid(ind, grid_width=old_val, grid_levels=cur_levels)
+        new_r = simulate_grid(ind, grid_width=new_val, grid_levels=cur_levels)
     elif param == "grid_count":
         old_r = simulate_grid(ind, grid_width=_get_coin_params(coin).get("grid_range_pct", 0.04), grid_levels=int(old_val))
         new_r = simulate_grid(ind, grid_width=_get_coin_params(coin).get("grid_range_pct", 0.04), grid_levels=int(new_val))
@@ -437,6 +442,14 @@ def _auto_apply_param(coin: str, param: str, old_val: float, new_val: float,
         except Exception as e:
             return False, f"写入失败: {e}"
 
+    # 登记到 brain 的回滚队列，让 72h 自动回滚安全网也能评估 ai_tuner 的改动
+    # （否则 ai_tuner 改坏了参数，brain.check_rollback 不会自动退回）
+    try:
+        from brain import _record_param_change
+        _record_param_change(coin, param, old_val, new_val, source="ai_tuner")
+    except Exception as e:
+        logger.warning(f"  ⚠️ 登记回滚快照失败（{coin}.{param}）: {e}")
+
     # 记录
     state.setdefault("auto_applied", []).append({
         "time": datetime.now(timezone.utc).isoformat(),
@@ -444,6 +457,7 @@ def _auto_apply_param(coin: str, param: str, old_val: float, new_val: float,
         "backtest_verdict": backtest_result["verdict"] if backtest_result else "skipped",
     })
     _save_state(state)
+    return True, f"已应用 {coin}.{param}: {old_val}→{new_val}"
 
 
 # ═══════════════════════════════════════════════════════════
