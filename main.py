@@ -105,6 +105,24 @@ def _apply_ml_regime(rule_regime, df, ccy, logger):
     return rule_regime
 
 
+def _guard_mult(guard_result: dict) -> tuple:
+    """将 account_guard 的 warn/protect/halt 状态转为仓位系数和开仓限制。
+    返回 (capital_mult, can_open_new, extra_restrictions)
+    - halt:      (0.0, False, ["close_only"])       → 主线已跳过
+    - protect:   (0.40, True,  ["reduce_position", "widen_grid"])
+    - warn:      (0.65, False, ["no_new_positions"])
+    - normal:    (1.0,  True,  [])
+    """
+    mode = guard_result.get("mode", "normal")
+    if mode == "halt":
+        return (0.0, False, ["close_only"])
+    if mode == "protect":
+        return (0.40, True, ["reduce_position", "widen_grid"])
+    if mode == "warn":
+        return (0.65, False, ["no_new_positions"])
+    return (1.0, True, [])
+
+
 def _strat_gate(ccy: str, sname: str):
     """返回某具体策略的 (是否允许开仓, 仓位乘数)。
     被 StrategyGuard 暂停/禁用 → (False, 0)；试运行/减半 → (True, <1)。
@@ -233,10 +251,15 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
     while not stop_event.is_set():
         now = time.time()
+        _tick_start = now     # tick 耗时监控起点
+        _ai_safety_mult = 1.0  # AI 安全系数：每 tick 重置，只能 ≤1.0
 
         # ── 全局熔断检查 ──────────────────────────────────
         guard_result = _guard.check()
         coin_result = _guard.coin_check(ccy)
+        _guard_cap_mult, _guard_can_open, _guard_extra = _guard_mult(guard_result)
+        guard_mode = guard_result.get("mode", "normal")
+
         if guard_result["status"] == "halt":
             logger.warning(f"⚠️ 全局熔断: {guard_result['reason']} — 跳过开仓")
             stop_event.wait(CHECK_INTERVAL)
@@ -245,8 +268,10 @@ def run_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"⚠️ {ccy} 冷却: {coin_result['reason']} — 跳过")
             stop_event.wait(CHECK_INTERVAL)
             continue
-        if guard_result["status"] == "protect":
-            logger.info(f"🛡️ 保护模式: {guard_result['reason']}")
+        if guard_mode == "protect":
+            logger.info(f"🛡️ 保护模式: {guard_result['reason']} — 仓位×{_guard_cap_mult:.0%}")
+        elif guard_mode == "warn":
+            logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
         # ── 策略级熔断 ──────────────────────────────────
         # 检查本币所有策略，全封则跳过（活一个就继续）
@@ -283,16 +308,36 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 )
 
                 # AI 二次验证（只在trending信号时调用，节省75% API调用）
+                ai_hint = None
+                _ai_safety_mult = 1.0  # AI 安全系数：只能 ≤1.0（降风险）
                 if indicators and new_regime in ("trending_up", "trending_down"):
                     ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
-                    if (ai_hint
-                            and ai_hint["regime"] != new_regime
-                            and ai_hint["confidence"] >= config.AI_CONFIDENCE_THRESHOLD):
-                        logger.info(
-                            f"AI 覆盖: {new_regime} → {ai_hint['regime']} "
-                            f"(置信度={ai_hint['confidence']:.0%})"
-                        )
-                        new_regime = ai_hint["regime"]
+                    if ai_hint:
+                        confidence = ai_hint.get("confidence", 0)
+                        regime = ai_hint.get("regime", "")
+                        # 低置信度 → 自动缩仓
+                        if confidence < 0.60:
+                            _ai_safety_mult = 0.50
+                            logger.info(f"🛡️ AI 置信度 {confidence:.0%} < 60%，仓位减半")
+                        elif confidence < 0.75:
+                            _ai_safety_mult = 0.75
+                            logger.info(f"🛡️ AI 置信度 {confidence:.0%} < 75%，仓位×0.75")
+                        # 行情覆盖（规则引擎 trending → AI ranging = 降级）
+                        if regime != new_regime and confidence >= config.AI_CONFIDENCE_THRESHOLD:
+                            logger.info(
+                                f"AI 覆盖: {new_regime} → {regime} "
+                                f"(置信度={confidence:.0%})"
+                            )
+                            new_regime = regime
+                elif indicators and new_regime in ("ranging",):
+                    # ranging 时 AI 可以降低仓位（但不改变 regime）
+                    try:
+                        ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                        if ai_hint and ai_hint.get("confidence", 0) < 0.50:
+                            _ai_safety_mult = 0.65
+                            logger.info(f"🛡️ AI 对 {new_regime} 低置信度，仓位×0.65")
+                    except:
+                        pass
 
                 logger.info(tracker.summary())
 
@@ -346,18 +391,23 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             current_regime = new_regime
                             _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
                             if new_regime in ("ranging", "trending_up", "trending_down") and _sg_allowed:
-                                trx_strat.start(new_regime, price,
-                                                capital=initial_capital * _sg_mult, indicators=indicators)
-                                logger.info(f"TRX 自适应策略启动: {new_regime}（仓位×{_sg_mult:.0%}）")
+                                if not _guard_can_open:
+                                    logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
+                                else:
+                                    trx_strat.start(new_regime, price,
+                                                    capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                    indicators=indicators)
+                                    logger.info(f"TRX 自适应策略启动: {new_regime}（仓位×{_sg_mult * _guard_cap_mult:.0%}）")
                             else:
                                 logger.info("TRX 行情不明朗或策略受限，空仓等待")
                     elif new_regime in ("ranging", "trending_up", "trending_down") and not trx_strat.running:
                         # 行情未变但策略意外停止（如网格全成交后 IDLE），重新启动
                         _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
-                        if _sg_allowed:
+                        if _sg_allowed and _guard_can_open:
                             logger.info(f"TRX 策略未运行，重新启动: {new_regime}")
                             trx_strat.start(new_regime, price,
-                                            capital=initial_capital * _sg_mult, indicators=indicators)
+                                            capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                            indicators=indicators)
                 else:
                     # 行情切换策略（ETH / SOL）— 带冷却，避免频繁切换市价平仓
                     if new_regime != current_regime:
@@ -386,6 +436,8 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                 logger.info(f"⚠️ {ccy} 网格策略受限（StrategyGuard），空仓等待")
                             elif new_regime in ("trending_up", "trending_down") and not _trend_allowed:
                                 logger.info(f"⚠️ {ccy} 趋势策略受限（StrategyGuard），空仓等待")
+                            elif not _guard_can_open:
+                                logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
                             elif new_regime == "ranging":
                                 # 按币种读取网格参数（回测调优）
                                 coin_base = ccy.split("-")[0]
@@ -394,13 +446,15 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
                                 # 宏观风险调整：高风险→网格更宽档更少，低风险→正常
                                 m_adj = get_macro_adjustment(GLOBAL_MACRO)
-                                grid_range *= m_adj["grid_width_mult"]
+                                # 保护模式加宽网格
+                                gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                grid_range *= gwide
                                 grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
-                                cap_mult = m_adj["position_multiplier"] * _grid_mult
+                                cap_mult = m_adj["position_multiplier"] * _grid_mult * _guard_cap_mult
                                 if m_adj["macro_risk"] > 0.65:
                                     logger.info(
                                         f"⚠️ 宏观风险 {m_adj['macro_risk']:.0%}，"
-                                        f"网格加宽×{m_adj['grid_width_mult']:.1f}，"
+                                        f"网格加宽×{gwide:.1f}，"
                                         f"仓位×{cap_mult:.0%}，"
                                         f"警告: {m_adj.get('warnings', [])}"
                                     )
@@ -412,26 +466,28 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                         lower=lower,
                                         upper=upper,
                                         grid_count=grid_count,
-                                        capital=initial_capital * max(0.5, 0.9 * cap_mult),
+                                        capital=initial_capital * max(0.5, 0.9 * cap_mult) * _ai_safety_mult,
                                         size_decimals=size_dec,
                                         symbol=ccy,
                                     )
                                     strat.start(price)
                                     current_strategy = ("grid", strat)
-                                    logger.info(f"启动网格: {lower:.6f} ~ {upper:.6f}（仓位×{_grid_mult:.0%}）")
+                                    total_mult = _grid_mult * _guard_cap_mult
+                                    logger.info(f"启动网格: {lower:.6f} ~ {upper:.6f}（仓位×{total_mult:.0%})")
                                 except ValueError as e:
                                     logger.warning(f"网格初始化失败: {e}")
 
                             elif new_regime in ("trending_up", "trending_down"):
                                 strat = TrendStrategy(
                                     client=client,
-                                    capital=initial_capital * _trend_mult,
+                                    capital=initial_capital * _trend_mult * _guard_cap_mult * _ai_safety_mult,
                                     size_decimals=size_dec,
                                     ccy=ccy,
                                 )
                                 strat.start(new_regime, price, indicators=indicators)
                                 current_strategy = ("trend", strat)
-                                logger.info(f"启动趋势策略: {new_regime}（仓位×{_trend_mult:.0%}）")
+                                total_mult = _trend_mult * _guard_cap_mult
+                                logger.info(f"启动趋势策略: {new_regime}（仓位×{total_mult:.0%})")
 
                             else:
                                 logger.info("行情不明朗，空仓等待")
@@ -455,8 +511,8 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                 # 切到网格（与 ranging 主分支一致地构造）
                                 strat.running = False
                                 _fb_allowed, _fb_mult = _strat_gate(ccy, "grid")
-                                if not _fb_allowed:
-                                    logger.info(f"⚠️ {ccy} 网格策略受限，连亏后空仓冷却")
+                                if not _fb_allowed or not _guard_can_open:
+                                    logger.info(f"⚠️ {ccy} 网格策略受限或预警模式，连亏后空仓冷却")
                                     current_strategy = None
                                     consecutive_trend_losses = 0
                                     last_switch_time = now_ts
@@ -465,15 +521,16 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                 grid_count = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
                                 grid_range = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
                                 m_adj = get_macro_adjustment(GLOBAL_MACRO)
-                                grid_range *= m_adj["grid_width_mult"]
+                                gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                grid_range *= gwide
                                 grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
-                                cap_mult = m_adj["position_multiplier"] * _fb_mult
+                                cap_mult = m_adj["position_multiplier"] * _fb_mult * _guard_cap_mult
                                 lower, upper = get_range_bounds(df, grid_range)
                                 try:
                                     grid_strat = GridStrategy(
                                         client=client, lower=lower, upper=upper,
                                         grid_count=grid_count,
-                                        capital=initial_capital * max(0.5, 0.9 * cap_mult),
+                                        capital=initial_capital * max(0.5, 0.9 * cap_mult) * _ai_safety_mult,
                                         size_decimals=size_dec, symbol=ccy,
                                     )
                                     grid_strat.start(price)
@@ -565,6 +622,11 @@ def run_coin(ccy: str, stop_event: threading.Event):
         except Exception as e:
             logger.error(f"策略执行异常: {e}")
 
+        # ── tick 耗时监控 ────────────────────────────────
+        _tick_dur = time.time() - _tick_start
+        if _tick_dur > 5.0:
+            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值5s) — 策略路径或API过慢")
+
         stop_event.wait(CHECK_INTERVAL)
 
     logger.info(f"=== {ccy} 策略线程退出 ===")
@@ -622,10 +684,15 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
     while not stop_event.is_set():
         now = time.time()
+        _tick_start = now     # tick 耗时监控起点
+        _ai_safety_mult = 1.0  # AI 安全系数：每 tick 重置，只能 ≤1.0
 
         # ── 全局熔断检查 ──────────────────────────────────
         guard_result = _guard.check()
         coin_result = _guard.coin_check(ccy)
+        _guard_cap_mult, _guard_can_open, _guard_extra = _guard_mult(guard_result)
+        guard_mode = guard_result.get("mode", "normal")
+
         if guard_result["status"] == "halt":
             logger.warning(f"⚠️ 全局熔断: {guard_result['reason']} — 跳过开仓")
             stop_event.wait(CHECK_INTERVAL)
@@ -634,8 +701,10 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"⚠️ {ccy} 冷却: {coin_result['reason']} — 跳过")
             stop_event.wait(CHECK_INTERVAL)
             continue
-        if guard_result["status"] == "protect":
-            logger.info(f"🛡️ 保护模式: {guard_result['reason']}")
+        if guard_mode == "protect":
+            logger.info(f"🛡️ 保护模式: {guard_result['reason']} — 仓位×{_guard_cap_mult:.0%}")
+        elif guard_mode == "warn":
+            logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
         # ── 策略级熔断（合约） ──────────────────────────
         all_blocked = False
@@ -671,14 +740,29 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                 if indicators and new_regime in ("trending_up", "trending_down"):
                     ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
-                    if (ai_hint
-                            and ai_hint["regime"] != new_regime
-                            and ai_hint["confidence"] >= config.AI_CONFIDENCE_THRESHOLD):
-                        logger.info(
-                            f"AI 覆盖: {new_regime} → {ai_hint['regime']} "
-                            f"(置信度={ai_hint['confidence']:.0%})"
-                        )
-                        new_regime = ai_hint["regime"]
+                    if ai_hint:
+                        confidence = ai_hint.get("confidence", 0)
+                        regime = ai_hint.get("regime", "")
+                        if confidence < 0.60:
+                            _ai_safety_mult = 0.50
+                            logger.info(f"🛡️ AI 置信度 {confidence:.0%} < 60%，仓位减半")
+                        elif confidence < 0.75:
+                            _ai_safety_mult = 0.75
+                            logger.info(f"🛡️ AI 置信度 {confidence:.0%} < 75%，仓位×0.75")
+                        if regime != new_regime and confidence >= config.AI_CONFIDENCE_THRESHOLD:
+                            logger.info(
+                                f"AI 覆盖: {new_regime} → {regime} "
+                                f"(置信度={confidence:.0%})"
+                            )
+                            new_regime = regime
+                elif indicators and new_regime in ("ranging",):
+                    try:
+                        ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                        if ai_hint and ai_hint.get("confidence", 0) < 0.50:
+                            _ai_safety_mult = 0.65
+                            logger.info(f"🛡️ AI 对 {new_regime} 低置信度，仓位×0.65")
+                    except:
+                        pass
 
                 logger.info(tracker.summary())
 
@@ -730,17 +814,22 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                             current_regime = new_regime
                             _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
                             if new_regime in ("ranging", "trending_up", "trending_down") and _sg_allowed:
-                                trx_swap_strat.start(new_regime, price,
-                                                     capital=initial_capital * _sg_mult, indicators=indicators)
-                                logger.info(f"TRX_SWAP 自适应策略启动: {new_regime}（仓位×{_sg_mult:.0%}）")
+                                if not _guard_can_open:
+                                    logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
+                                else:
+                                    trx_swap_strat.start(new_regime, price,
+                                                         capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                         indicators=indicators)
+                                    logger.info(f"TRX_SWAP 自适应策略启动: {new_regime}（仓位×{_sg_mult * _guard_cap_mult:.0%})")
                             else:
                                 logger.info("TRX_SWAP 行情不明朗或策略受限，空仓等待")
                     elif new_regime in ("ranging", "trending_up", "trending_down") and not trx_swap_strat.running:
                         _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
-                        if _sg_allowed:
+                        if _sg_allowed and _guard_can_open:
                             logger.info(f"TRX_SWAP 策略未运行，重新启动: {new_regime}")
                             trx_swap_strat.start(new_regime, price,
-                                                 capital=initial_capital * _sg_mult, indicators=indicators)
+                                                 capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                 indicators=indicators)
                 else:
                     if new_regime != current_regime:
                         if now - last_switch_time < SWITCH_COOLDOWN:
@@ -764,6 +853,8 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                 logger.info(f"⚠️ {ccy} 合约网格受限（StrategyGuard），空仓等待")
                             elif new_regime in ("trending_up", "trending_down") and not _ft_allowed:
                                 logger.info(f"⚠️ {ccy} 合约趋势受限（StrategyGuard），空仓等待")
+                            elif not _guard_can_open:
+                                logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
                             elif new_regime == "ranging":
                                 lower, upper = 0, 0
                                 try:
@@ -775,13 +866,14 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                                     # 宏观风险调整
                                     m_adj = get_macro_adjustment(GLOBAL_MACRO)
-                                    grid_range *= m_adj["grid_width_mult"]
+                                    gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                    grid_range *= gwide
                                     grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
-                                    cap_mult = m_adj["position_multiplier"] * _fg_mult
+                                    cap_mult = m_adj["position_multiplier"] * _fg_mult * _guard_cap_mult
                                     if m_adj["macro_risk"] > 0.65:
                                         logger.info(
                                             f"⚠️ {ccy} 宏观风险 {m_adj['macro_risk']:.0%}，"
-                                            f"网格加宽×{m_adj['grid_width_mult']:.1f}，"
+                                            f"网格加宽×{gwide:.1f}，"
                                             f"警告: {m_adj.get('warnings', [])}"
                                         )
 
@@ -789,12 +881,13 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                     strat = FuturesGridStrategy(
                                         client=client, lower=lower, upper=upper,
                                         grid_count=grid_count,
-                                        capital=initial_capital * max(0.3, grid_pos * cap_mult),
+                                        capital=initial_capital * max(0.3, grid_pos * cap_mult) * _ai_safety_mult,
                                         symbol=ccy,
                                     )
                                     strat.start(price)
                                     current_strategy = ("futures_grid", strat)
-                                    logger.info(f"启动合约网格: {lower:.4f} ~ {upper:.4f}（仓位×{_fg_mult:.0%}）")
+                                    total_mult = _fg_mult * _guard_cap_mult
+                                    logger.info(f"启动合约网格: {lower:.4f} ~ {upper:.4f}（仓位×{total_mult:.0%})")
                                 except ValueError as e:
                                     logger.warning(f"合约网格初始化失败: {e}")
 
@@ -815,10 +908,12 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                                 if funding_ok:
                                     strat = FuturesTrendStrategy(client=client,
-                                                                 capital=initial_capital * _ft_mult, ccy=ccy)
+                                                                 capital=initial_capital * _ft_mult * _guard_cap_mult * _ai_safety_mult,
+                                                                 ccy=ccy)
                                     strat.start(new_regime, price, indicators=indicators)
                                     current_strategy = ("futures_trend", strat)
-                                    logger.info(f"启动合约趋势策略: {new_regime}（仓位×{_ft_mult:.0%}）")
+                                    total_mult = _ft_mult * _guard_cap_mult
+                                    logger.info(f"启动合约趋势策略: {new_regime}（仓位×{total_mult:.0%})")
                                 else:
                                     logger.info("资金费率不利，空仓等待")
                             else:
@@ -850,8 +945,8 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                 )
                                 strat.running = False
                                 _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
-                                if not _fb_allowed:
-                                    logger.info(f"⚠️ {ccy} 合约网格受限，连亏后空仓冷却")
+                                if not _fb_allowed or not _guard_can_open:
+                                    logger.info(f"⚠️ {ccy} 合约网格受限或预警模式，连亏后空仓冷却")
                                     current_strategy = None
                                     consecutive_trend_losses = 0
                                     last_switch_time = now_ts
@@ -861,15 +956,16 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                 grid_range = getattr(config, f"{ccy[:-5]}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
                                 grid_pos   = getattr(config, f"{ccy[:-5]}_GRID_POSITION_PCT", 0.5)
                                 m_adj = get_macro_adjustment(GLOBAL_MACRO)
-                                grid_range *= m_adj["grid_width_mult"]
+                                gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                grid_range *= gwide
                                 grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
-                                cap_mult = m_adj["position_multiplier"] * _fb_mult
+                                cap_mult = m_adj["position_multiplier"] * _fb_mult * _guard_cap_mult
                                 try:
                                     lower, upper = get_range_bounds(df, grid_range)
                                     grid_strat = FuturesGridStrategy(
                                         client=client, lower=lower, upper=upper,
                                         grid_count=grid_count,
-                                        capital=initial_capital * max(0.3, grid_pos * cap_mult),
+                                        capital=initial_capital * max(0.3, grid_pos * cap_mult) * _ai_safety_mult,
                                         symbol=ccy,
                                     )
                                     grid_strat.start(price)
@@ -962,6 +1058,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         if should_stop:
             break
 
+        # ── tick 耗时监控 ────────────────────────────────
+        _tick_dur = time.time() - _tick_start
+        if _tick_dur > 8.0:
+            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值8s) — API或策略路径过慢")
+
         stop_event.wait(CHECK_INTERVAL)
 
     logger.info(f"=== {ccy} 合约策略线程退出 ===")
@@ -1026,8 +1127,75 @@ def main():
     logger = logging.getLogger("main")
     logger.info(f"=== 量化机器人启动，交易对: {config.COINS} ===")
 
+    # ── 启动前安全检查：extreme/halt/protect 状态恢复 ──────────
+    _startup_blocked = False
+    try:
+        from account_guard import _safe_parse_dt
+        from evolution_lock import LockManager
+        lm = LockManager()
+        now_utc = datetime.now(timezone.utc)
+        recent_locks = [
+            e for e in lm._load_writes()
+            if _safe_parse_dt(e.get("time", "")) and
+               (now_utc - _safe_parse_dt(e.get("time", ""))).total_seconds() < 3600
+        ]
+        extreme_msgs = [e.get("reason","") for e in recent_locks if "extreme" in str(e.get("reason","")).lower()]
+        if extreme_msgs:
+            logger.warning(f"⚠️ 启动检查：过去 1h 有 extreme_market 锁定事件 ({len(extreme_msgs)} 次)")
+            logger.warning(f"   最新: {extreme_msgs[-1][:120]}")
+        # 检查 guard 状态
+        guard_status = _guard.status_report()
+        if guard_status["status"] in ("halt", "protect", "warn"):
+            logger.warning(f"⚠️ 启动检查：账户守护者状态={guard_status['status']}, 日PnL={guard_status['daily_pnl_pct']:+.1f}%")
+            if guard_status["status"] == "halt":
+                logger.error("❌ 启动时账户处于 HALT 状态，仅恢复监控不启动策略")
+                _startup_blocked = True
+    except Exception as e:
+        logger.warning(f"启动安全检查失败（不影响启动）: {e}")
+
+    # ── TOTAL_CAPITAL 与真实账户权益一致性检查 ────────────────
+    try:
+        check_client = OKXClient(symbol="TRX-USDT-SWAP")
+        usdt_balance = check_client.get_balance("USDT")
+        total_in_config = sum(c["initial_capital"] for c in config.COIN_CONFIG.values())
+        cfg_total = getattr(config, "TOTAL_CAPITAL", total_in_config)
+        if usdt_balance > 0 and total_in_config > 0:
+            gap_pct = abs(usdt_balance - cfg_total) / cfg_total
+            if gap_pct > 0.20:
+                logger.warning(
+                    f"⚠️ TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
+                    f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
+                )
+            elif gap_pct > 0.05:
+                logger.info(
+                    f"📊 TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
+                    f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
+                )
+            else:
+                logger.info(
+                    f"✅ TOTAL_CAPITAL 一致性 OK: config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT "
+                    f"(偏差 {gap_pct:.1%})"
+                )
+        elif usdt_balance <= 0:
+            logger.warning("⚠️ 无法获取账户 USDT 余额，跳过一致性检查")
+    except Exception as e:
+        logger.warning(f"⚠️ TOTAL_CAPITAL 一致性检查失败（不影响启动）: {e}")
+
     stop_event = threading.Event()
     threads = []
+
+    if _startup_blocked:
+        logger.error("启动被阻断，30分钟后可手动重启。如需强制启动，删除 guard_state.json")
+        # 仍然启动一个监督心跳（不交易，等人工确认）
+        import time as _time
+        while True:
+            try:
+                Path(__file__).parent / ".bot_heartbeat"
+                (Path(__file__).parent / ".bot_heartbeat").touch()
+            except:
+                pass
+            _time.sleep(10)
+        return
 
     for ccy in config.COINS:
         mode   = config.COIN_CONFIG[ccy].get("mode", "spot")

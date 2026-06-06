@@ -13,14 +13,14 @@
   from strategy_guard import StrategyGuard
   sg = StrategyGuard()
   result = sg.check(coin, strategy)  # 每次策略决策前
+
+状态存储: SQLite (bot_state.db) — WAL 模式，跨线程安全，自动从 JSON 迁移
 """
 
 import json, os, time, logging, threading
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
-ROOT = Path(__file__).parent
-STATE_FILE = str(ROOT / "strategy_guard_state.json")
+from state_db import StrategyStateDB
 
 logger = logging.getLogger("strategy_guard")
 
@@ -60,42 +60,10 @@ ALL_STRATEGIES = {
 
 
 class StrategyGuard:
-    """每策略熔断，比账户级更精准"""
+    """每策略熔断，比账户级更精准。底层 SQLite 存储。"""
 
     def __init__(self):
-        self._load()
-
-    def _load(self):
-        if os.path.exists(STATE_FILE):
-            try:
-                with open(STATE_FILE) as f:
-                    self.state = json.load(f)
-                return
-            except Exception as e:
-                logger.warning(f"strategy_guard_state.json 损坏，备份后重建: {e}")
-                try:
-                    os.rename(STATE_FILE, f"{STATE_FILE}.corrupted.{int(time.time())}")
-                except Exception:
-                    pass
-        self.state = self._new_state()
-
-    def _save(self):
-        # 原子写入，避免 web 并发读到半截 JSON
-        tmp = f"{STATE_FILE}.tmp"
-        with open(tmp, "w") as f:
-            json.dump(self.state, f, indent=2, ensure_ascii=False, default=str)
-        os.replace(tmp, STATE_FILE)
-
-    def _new_state(self):
-        return {
-            "daily_scores": {},
-            "paused_until": {},
-            "probation_until": {},
-            "disabled": {},
-            "consecutive_bad": {},
-            "last_score": {},
-            "history": [],
-        }
+        self._db = StrategyStateDB()
 
     # ═══════════════════════════════════════════════════════
 
@@ -108,23 +76,30 @@ class StrategyGuard:
         today = str(datetime.now(timezone.utc).date())
         key = self._key(coin, strategy)
 
-        self.state.setdefault("daily_scores", {}).setdefault(today, {})[key] = score
-        self.state.setdefault("last_score", {})[key] = score
+        daily_scores = self._db.get_json("daily_scores", {})
+        daily_scores.setdefault(today, {})[key] = score
+        self._db.set_json("daily_scores", daily_scores)
 
-        cb = self.state.setdefault("consecutive_bad", {})
+        last_score = self._db.get_json("last_score", {})
+        last_score[key] = score
+        self._db.set_json("last_score", last_score)
+
+        cb = self._db.get_json("consecutive_bad", {})
         if score < SCORE_PAUSE_24H:
             cb[key] = cb.get(key, 0) + 1
         else:
             cb[key] = 0
+        self._db.set_json("consecutive_bad", cb)
 
-        self.state.setdefault("history", []).append({
+        history = self._db.get_json("history", [])
+        history.append({
             "time": datetime.now(timezone.utc).isoformat(),
             "action": "score_update",
             "coin": coin, "strategy": strategy, "score": score,
         })
-        if len(self.state["history"]) > 30:
-            self.state["history"] = self.state["history"][-30:]
-        self._save()
+        if len(history) > 30:
+            history = history[-30:]
+        self._db.set_json("history", history)
 
     # ═══════════════════════════════════════════════════════
     # 核心检查逻辑
@@ -142,12 +117,14 @@ class StrategyGuard:
         result = {"allowed": True, "mode": "normal", "position_mult": 1.0, "reason": ""}
 
         # ── 1. 永久禁用 ──
-        disabled_info = self.state.get("disabled", {}).get(key)
+        disabled = self._db.get_json("disabled", {})
+        disabled_info = disabled.get(key)
         if disabled_info:
             return {"allowed": False, "mode": "disabled", "position_mult": 0, "reason": f"策略已禁用: {disabled_info}"}
 
         # ── 2. 试运行（复检期） ──
-        probation_until_str = self.state.get("probation_until", {}).get(key)
+        probation = self._db.get_json("probation_until", {})
+        probation_until_str = probation.get(key)
         if probation_until_str:
             probation_until = datetime.fromisoformat(probation_until_str.replace("Z", "+00:00"))
             if now < probation_until:
@@ -159,28 +136,30 @@ class StrategyGuard:
                 return result
             else:
                 # 试运行到期 → 评估
-                last = self.state.get("last_score", {}).get(key)
-                del self.state["probation_until"][key]
+                last_score = self._db.get_json("last_score", {})
+                last = last_score.get(key)
+                del probation[key]
+                self._db.set_json("probation_until", probation)
                 if last is not None and last < SCORE_PAUSE_24H:
-                    # 试运行结束仍不合格 → 永久禁用
-                    self.state.setdefault("disabled", {})[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
-                    self._save()
+                    disabled[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
+                    self._db.set_json("disabled", disabled)
                     return {"allowed": False, "mode": "disabled", "position_mult": 0,
                             "reason": f"试运行失败: 评分{last}<{SCORE_PAUSE_24H}，已永久禁用"}
                 elif last is not None and last >= PROBATION_PASS_SCORE:
-                    # 合格 → 恢复
-                    self.state.get("consecutive_bad", {})[key] = 0
-                    self._save()
+                    cb = self._db.get_json("consecutive_bad", {})
+                    cb[key] = 0
+                    self._db.set_json("consecutive_bad", cb)
                     logger.info(f"✅ {key} 试运行通过 (评分{last})，恢复正常")
                 else:
-                    # 中间状态（40-49）→ 延长观察，但先恢复正常仓位
-                    self.state.get("consecutive_bad", {})[key] = 0
-                    self._save()
+                    cb = self._db.get_json("consecutive_bad", {})
+                    cb[key] = 0
+                    self._db.set_json("consecutive_bad", cb)
                     logger.info(f"👀 {key} 试运行结束 (评分{last})，恢复但仍需观察")
                 # fall through to normal
 
         # ── 3. 暂停期 ──
-        paused_until_str = self.state.get("paused_until", {}).get(key)
+        paused = self._db.get_json("paused_until", {})
+        paused_until_str = paused.get(key)
         if paused_until_str:
             paused_until = datetime.fromisoformat(paused_until_str.replace("Z", "+00:00"))
             if now < paused_until:
@@ -189,44 +168,46 @@ class StrategyGuard:
                         "reason": f"策略暂停中，剩余 {remaining_h:.1f}h"}
             else:
                 # 暂停到期 → 进入试运行
-                del self.state["paused_until"][key]
+                del paused[key]
+                self._db.set_json("paused_until", paused)
                 probation_until = now + timedelta(hours=PROBATION_HOURS)
-                self.state.setdefault("probation_until", {})[key] = probation_until.isoformat()
-                self._save()
+                probation[key] = probation_until.isoformat()
+                self._db.set_json("probation_until", probation)
                 logger.info(f"🔄 {key} 暂停到期，进入 {PROBATION_HOURS}h 试运行 ({PROBATION_POSITION:.0%}仓位)")
                 return {"allowed": True, "mode": "probation", "position_mult": PROBATION_POSITION,
                         "reason": f"恢复试运行 ({PROBATION_POSITION:.0%}仓位)，{PROBATION_HOURS}h 后评估"}
 
         # ── 4. 连续低评分 ──
-        cb = self.state.get("consecutive_bad", {}).get(key, 0)
+        cb = self._db.get_json("consecutive_bad", {})
+        cb_val = cb.get(key, 0)
 
-        if cb >= CONSECUTIVE_DISABLE:
-            self.state.setdefault("disabled", {})[key] = f"连续{cb}天评分<{SCORE_PAUSE_24H}，自动禁用"
-            self.state["consecutive_bad"][key] = 0
-            self._save()
+        if cb_val >= CONSECUTIVE_DISABLE:
+            disabled[key] = f"连续{cb_val}天评分<{SCORE_PAUSE_24H}，自动禁用"
+            self._db.set_json("disabled", disabled)
+            cb[key] = 0
+            self._db.set_json("consecutive_bad", cb)
             return {"allowed": False, "mode": "disabled", "position_mult": 0,
-                    "reason": f"连续{cb}天低评分，已禁用"}
+                    "reason": f"连续{cb_val}天低评分，已禁用"}
 
-        if cb >= CONSECUTIVE_REDUCE:
+        if cb_val >= CONSECUTIVE_REDUCE:
             return {"allowed": True, "mode": "reduced", "position_mult": POSITION_REDUCTION,
-                    "reason": f"连续{cb}天评分<{SCORE_PAUSE_24H}，仓位减半"}
+                    "reason": f"连续{cb_val}天评分<{SCORE_PAUSE_24H}，仓位减半"}
 
         # ── 5. 评分阈值检查 ──
-        last_score = self.state.get("last_score", {}).get(key)
+        last_score = self._db.get_json("last_score", {})
+        last = last_score.get(key)
 
-        if last_score is not None and last_score < SCORE_PAUSE_72H:
-            paused_until = now + timedelta(hours=72)
-            self.state.setdefault("paused_until", {})[key] = paused_until.isoformat()
-            self._save()
+        if last is not None and last < SCORE_PAUSE_72H:
+            paused[key] = (now + timedelta(hours=72)).isoformat()
+            self._db.set_json("paused_until", paused)
             return {"allowed": False, "mode": "paused", "position_mult": 0,
-                    "reason": f"评分{last_score}<{SCORE_PAUSE_72H}，暂停72h"}
+                    "reason": f"评分{last}<{SCORE_PAUSE_72H}，暂停72h"}
 
-        if last_score is not None and last_score < SCORE_PAUSE_24H:
-            paused_until = now + timedelta(hours=24)
-            self.state.setdefault("paused_until", {})[key] = paused_until.isoformat()
-            self._save()
+        if last is not None and last < SCORE_PAUSE_24H:
+            paused[key] = (now + timedelta(hours=24)).isoformat()
+            self._db.set_json("paused_until", paused)
             return {"allowed": False, "mode": "paused", "position_mult": 0,
-                    "reason": f"评分{last_score}<{SCORE_PAUSE_24H}，暂停24h"}
+                    "reason": f"评分{last}<{SCORE_PAUSE_24H}，暂停24h"}
 
         return result
 
@@ -238,26 +219,37 @@ class StrategyGuard:
     def manual_enable(self, coin: str, strategy: str):
         """人工恢复禁用策略"""
         key = self._key(coin, strategy)
-        self.state.get("disabled", {}).pop(key, None)
-        self.state.get("paused_until", {}).pop(key, None)
-        self.state.get("probation_until", {}).pop(key, None)
-        self.state.get("consecutive_bad", {})[key] = 0
-        self.state.setdefault("history", []).append({
-            "time": datetime.now(timezone.utc).isoformat(),
-            "action": "manual_enable",
-            "coin": coin, "strategy": strategy,
-        })
-        self._save()
+        disabled = self._db.get_json("disabled", {})
+        disabled.pop(key, None)
+        self._db.set_json("disabled", disabled)
+        paused = self._db.get_json("paused_until", {})
+        paused.pop(key, None)
+        self._db.set_json("paused_until", paused)
+        probation = self._db.get_json("probation_until", {})
+        probation.pop(key, None)
+        self._db.set_json("probation_until", probation)
+        cb = self._db.get_json("consecutive_bad", {})
+        cb[key] = 0
+        self._db.set_json("consecutive_bad", cb)
+        history = self._db.get_json("history", [])
+        history.append({"time": datetime.now(timezone.utc).isoformat(),
+                        "action": "manual_enable", "coin": coin, "strategy": strategy})
+        self._db.set_json("history", history[-30:])
         logger.info(f"✅ 人工恢复 {key}")
 
     @_synchronized
     def manual_disable(self, coin: str, strategy: str, reason: str = "人工禁用"):
         """强制禁用策略"""
         key = self._key(coin, strategy)
-        self.state.setdefault("disabled", {})[key] = reason
-        self.state.get("paused_until", {}).pop(key, None)
-        self.state.get("probation_until", {}).pop(key, None)
-        self._save()
+        disabled = self._db.get_json("disabled", {})
+        disabled[key] = reason
+        self._db.set_json("disabled", disabled)
+        paused = self._db.get_json("paused_until", {})
+        paused.pop(key, None)
+        self._db.set_json("paused_until", paused)
+        probation = self._db.get_json("probation_until", {})
+        probation.pop(key, None)
+        self._db.set_json("probation_until", probation)
         logger.info(f"🚫 人工禁用 {key}: {reason}")
 
     @staticmethod
@@ -346,24 +338,18 @@ if __name__ == "__main__":
             r1 = sg.check("SOL", "trend")
             print(f"  1. 评分35: {r1['mode']} → {r1['reason']}")
 
-            # 模拟暂停到期 (需要改文件偷步)
-            import json
-            with open(STATE_FILE) as f:
-                state = json.load(f)
-            # 把 paused_until 设成1分钟前
-            state["paused_until"]["SOL:trend"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-            with open(STATE_FILE, "w") as f:
-                json.dump(state, f, indent=2)
-            sg._load()
+            # 模拟暂停到期 (直接改 SQLite 偷步)
+            paused = sg._db.get_json("paused_until", {})
+            paused["SOL:trend"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+            sg._db.set_json("paused_until", paused)
             r2 = sg.check("SOL", "trend")
             print(f"  2. 暂停到期: {r2['mode']} → {r2['reason']} (仓位×{r2['position_mult']:.0%})")
 
             # 模拟试运行结束+评分仍低
             sg.update_score("SOL", "trend", 30)
-            state.setdefault("probation_until", {})["SOL:trend"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-            with open(STATE_FILE, "w") as f:
-                json.dump(state, f, indent=2)
-            sg._load()
+            probation = sg._db.get_json("probation_until", {})
+            probation["SOL:trend"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+            sg._db.set_json("probation_until", probation)
             r3 = sg.check("SOL", "trend")
             print(f"  3. 试运行失败(评分30): {r3['mode']} → {r3['reason']}")
 

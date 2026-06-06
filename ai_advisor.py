@@ -199,3 +199,58 @@ def get_enhanced_ai_advice(indicators: dict, fund_context: str, rule_regime: str
     except Exception as e:
         logger.warning(f"增强AI 异常: {e}，降级到规则引擎")
     return None
+
+
+# ═══════════════════════════════════════════════════════════════
+# 安全包装：AI 只能降风险，不能加风险
+# ═══════════════════════════════════════════════════════════════
+
+# 入场级别 → 仓位倍数
+_ENTRY_MAP = {"full": 1.0, "half": 0.6, "skip": 0.0}
+
+# baseline_mult: 规则引擎决定的仓位（如 macro_adjustment 后）
+# ai_advice: AI 返回的增强建议（可能为 None）
+# 规则：AI 只能把仓位向下调整，不能向上
+
+
+def safe_ai_advice(baseline_mult: float, ai_advice: dict | None) -> dict:
+    """
+    AI 安全包装：只允许降低风险。
+    
+    返回:
+      - effective_mult: 实际生效的仓位倍数（≤ baseline_mult）
+      - ai_entry: AI 推荐的入场级别
+      - ai_regime: AI 判断的行情（可为 None）
+      - warnings: AI 提示的风险标记
+      - downgraded: 是否被 AI 降级了
+    """
+    if ai_advice is None or not isinstance(ai_advice, dict):
+        return {
+            "effective_mult": baseline_mult,
+            "ai_entry": None,
+            "ai_regime": None,
+            "warnings": [],
+            "downgraded": False,
+        }
+
+    ai_entry = ai_advice.get("entry_advice", "half")
+    ai_mult = _ENTRY_MAP.get(ai_entry, 0.6)
+
+    # 核心安全约束：AI 只能降低仓位
+    effective_mult = min(baseline_mult, ai_mult)
+
+    result = {
+        "effective_mult": effective_mult,
+        "ai_entry": ai_entry,
+        "ai_regime": ai_advice.get("regime"),
+        "warnings": ai_advice.get("warning_flags", []),
+        "downgraded": effective_mult < baseline_mult,
+    }
+
+    if result["downgraded"]:
+        logger.info(
+            f"🛡️ AI 安全降级: 仓位 {baseline_mult:.0%}→{effective_mult:.0%} "
+            f"({ai_entry}), 风险标记: {result['warnings']}"
+        )
+
+    return result

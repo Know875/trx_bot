@@ -347,7 +347,7 @@ class OKXClient:
 
     @_retry()
     def set_leverage(self, lever=None, mgnMode=None):
-        lever = str(lever or config.FUTURES_LEVERAGE)
+        lever = str(lever or config.get_leverage(self.symbol))
         mgnMode = mgnMode or config.FUTURES_MARGIN_MODE
         result = self.account.set_leverage(instId=self.symbol, lever=lever, mgnMode=mgnMode)
         if result["code"] != "0":

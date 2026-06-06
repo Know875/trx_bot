@@ -29,16 +29,19 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 # ── 认证中间件 ─────────────────────────────────────────────────
-_USERNAME = getattr(config, "DASHBOARD_USERNAME", "admin")
-_PASSWORD = getattr(config, "DASHBOARD_PASSWORD", "admin123")
+_USERNAME = getattr(config, "DASHBOARD_USERNAME", "") or "admin"
+_PASSWORD = getattr(config, "DASHBOARD_PASSWORD", "")
 # 简单 session token（重启后失效，够用）。value = 过期时间戳
 _SESSION_TOKENS: dict[str, float] = {}
 
-# 使用默认弱口令时告警（GET 接口默认放行，泄露账户财务状态风险高）
-if _PASSWORD == "admin123":
+# 必须设置 DASHBOARD_PASSWORD 环境变量，且不能用默认弱口令
+_WEAK_PASSWORDS = {"", "admin123", "password", "123456", "admin"}
+_AUTH_ENABLED = bool(_PASSWORD) and _PASSWORD not in _WEAK_PASSWORDS
+if not _AUTH_ENABLED:
     import logging as _logging
-    _logging.getLogger("dashboard").warning(
-        "⚠️ Dashboard 仍在使用默认密码 admin123，请设置环境变量 DASHBOARD_PASSWORD"
+    _logging.getLogger("dashboard").error(
+        "❌ DASHBOARD_PASSWORD 未设置或使用弱口令（admin123等），Dashboard 启动但所有操作需要认证，"
+        "当前无有效密码，请在 .env 中设置 DASHBOARD_PASSWORD=你的强密码"
     )
 
 # 受保护的路径前缀（GET 只读接口除外，避免 dashboard 加载卡死）
@@ -49,6 +52,7 @@ _PROTECTED_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 async def auth_middleware(request: Request, call_next):
     """对写操作（POST/DELETE 等）和敏感 GET 接口强制认证。
     静态资源和普通 GET（status/stats/candles 等）无需认证，方便只读监控。
+    未设置 DASHBOARD_PASSWORD 时拒绝所有敏感操作。
     """
     method = request.method.upper()
     path = request.url.path
@@ -60,6 +64,12 @@ async def auth_middleware(request: Request, call_next):
     # GET 请求默认放行（只读监控），但 logs 路径需要认证（泄露策略信息）
     if method == "GET" and not path.startswith("/api/logs"):
         return await call_next(request)
+
+    if not path.startswith("/api/auth/login") and not _AUTH_ENABLED:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Dashboard 未配置认证密码，请在 .env 中设置 DASHBOARD_PASSWORD（非 admin123）", "need_auth": True},
+        )
 
     # 需要认证：检查 Authorization header 或 token cookie
     auth = request.headers.get("Authorization", "")
@@ -96,6 +106,8 @@ async def auth_middleware(request: Request, call_next):
 @app.post("/api/auth/login")
 async def login(request: Request):
     """登录接口，返回 session token"""
+    if not _AUTH_ENABLED:
+        raise HTTPException(status_code=503, detail="Dashboard 未配置认证密码，请设置 DASHBOARD_PASSWORD 环境变量")
     import base64
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Basic "):

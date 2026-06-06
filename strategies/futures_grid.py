@@ -61,7 +61,7 @@ class FuturesGridStrategy:
 
     def _calc_contracts(self, usdt, price):
         ct_val = self._get_ct_val()
-        raw = usdt * config.FUTURES_LEVERAGE / (price * ct_val)
+        raw = usdt * config.get_leverage(self.symbol) / (price * ct_val)
         return max(1, math.floor(raw))
 
     def start(self, current_price):

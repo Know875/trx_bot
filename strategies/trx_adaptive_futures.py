@@ -92,7 +92,7 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
     def _calc_trade_size(self, usdt, price):
         """合约：USDT → 张数"""
         ct_val = self._get_ct_val()
-        raw = usdt * config.FUTURES_LEVERAGE / (price * ct_val)
+        raw = usdt * config.get_leverage("TRX_SWAP") / (price * ct_val)
         return max(1, math.floor(raw))
 
     def _calc_pnl(self, size, entry, exit_price, side="long"):

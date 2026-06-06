@@ -31,22 +31,20 @@ def safe_iso_to_dt(s: str):
 # ═══════════════════════════════════════════════════════════
 
 def read_guard() -> dict:
-    state = load_json(str(ROOT / "guard_state.json"))
-    if not state:
+    from account_guard import Guard
+    try:
+        g = Guard()
+        r = g.status_report()
+        icon_map = {"normal": "🟢", "warn": "🟡", "protect": "🔴", "halt": "💀"}
+        return {
+            "icon": icon_map.get(r.get("status", "normal"), "⚪"),
+            "status": r.get("status", "normal"),
+            "daily_pnl": r.get("daily_pnl", 0),
+            "daily_pnl_pct": r.get("daily_pnl_pct", 0),
+            "alerts": len(r.get("alerts", [])),
+        }
+    except Exception:
         return {"icon": "⚪", "status": "no_data", "daily_pnl": 0, "daily_pnl_pct": 0, "alerts": 0}
-    daily = state.get("daily_pnl", 0) or 0
-    cap = state.get("total_capital", 500)
-    pct = daily / cap * 100 if cap else 0
-    status = state.get("status", "normal")
-    icon_map = {"normal": "🟢", "warn": "🟡", "protect": "🔴", "halt": "💀"}
-    alerts = len(state.get("alerts", []))
-    return {
-        "icon": icon_map.get(status, "⚪"),
-        "status": status,
-        "daily_pnl": round(daily, 2),
-        "daily_pnl_pct": round(pct, 2),
-        "alerts": alerts,
-    }
 
 def read_extreme() -> dict:
     try:
@@ -66,17 +64,20 @@ def read_macro() -> dict:
 
 def read_strategies() -> list:
     from strategy_guard import StrategyGuard
+    from account_guard import Guard
     sg = StrategyGuard()
     s = sg.status()
-    guard_state = load_json(str(ROOT / "guard_state.json"))
+    g = Guard()
+    guard_rpt = g.status_report()
+    per_coin = guard_rpt.get("per_coin", {})
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     results = []
 
     for l in s["lines"]:
         key = l["key"]
         coin = key.split(":")[0]
-        per_coin = guard_state.get("per_coin", {}).get(coin, {})
-        cons = per_coin.get("consecutive_losses", 0) or 0
+        pc = per_coin.get(coin, {})
+        cons = pc.get("consecutive_losses", 0) or 0
 
         cooled_until = safe_iso_to_dt(guard_state.get("coin_cooled_until", {}).get(coin))
         coin_cooled = cooled_until is not None and now_naive < cooled_until

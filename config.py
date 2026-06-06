@@ -42,8 +42,8 @@ PASSPHRASE = _env("OKX_PASSPHRASE")
 FLAG       = _env("OKX_FLAG", "1")  # "1"=模拟盘  "0"=实盘
 
 # ── Dashboard 认证 ──────────────────────────────────────────
-DASHBOARD_USERNAME = _env("DASHBOARD_USERNAME", "admin")
-DASHBOARD_PASSWORD = _env("DASHBOARD_PASSWORD", "admin123")
+DASHBOARD_USERNAME = _env("DASHBOARD_USERNAME", "")
+DASHBOARD_PASSWORD = _env("DASHBOARD_PASSWORD", "")
 
 SYMBOL         = "TRX-USDT"
 INITIAL_CAPITAL = 1000.0   # 向后兼容
@@ -71,12 +71,14 @@ COIN_CONFIG = {
         "initial_capital": 2000.0, "base_ccy": "TRX",
         "ct_val": 1000.0,   # 每张合约面值（TRX）
         "size_decimals": 0, "min_order_size": 1,
+        "leverage": 3,       # TRX 波动大，低杠杆
     },
     "ETH_SWAP": {
         "symbol": "ETH-USDT-SWAP", "mode": "futures",
         "initial_capital": 2500.0, "base_ccy": "ETH",
         "ct_val": 0.01,     # 每张合约面值（ETH）
         "size_decimals": 4, "min_order_size": 0.001,
+        "leverage": 5,       # ETH 波动中等
     },
     "SOL_SWAP": {
         "symbol": "SOL-USDT-SWAP", "mode": "futures",
@@ -84,6 +86,7 @@ COIN_CONFIG = {
         "ct_val": 1.0,      # 每张合约面值（SOL）
         "size_decimals": 2, "min_order_size": 0.01,
         "market_flag": "0", # 模拟盘 SOL-USDT-SWAP 价格失真，行情数据从实盘取
+        "leverage": 5,       # SOL 波动中等偏高
     },
 }
 
@@ -99,8 +102,20 @@ SPOT_FEE_RATE    = float(_env("SPOT_FEE_RATE", "0.001"))     # 现货单边费�
 FUTURES_FEE_RATE = float(_env("FUTURES_FEE_RATE", "0.0005")) # 合约单边费率
 
 # ── 合约参数 ───────────────────────────────────────────────────
-FUTURES_LEVERAGE    = 5
 FUTURES_MARGIN_MODE = "isolated"   # isolated / cross
+FUTURES_DEFAULT_LEVERAGE = 5       # 默认杠杆（未被 COIN_CONFIG 覆盖时使用）
+
+def get_leverage(ccy: str) -> int:
+    """返回币种杠杆：优先 CCY_SWAP 配置，fallback 到默认值"""
+    if ccy in COIN_CONFIG and "leverage" in COIN_CONFIG[ccy]:
+        return int(COIN_CONFIG[ccy]["leverage"])
+    return FUTURES_DEFAULT_LEVERAGE
+
+def get_ct_val(ccy: str) -> float:
+    """返回币种合约单张面值"""
+    if ccy in COIN_CONFIG:
+        return float(COIN_CONFIG[ccy].get("ct_val", 1.0))
+    return 1.0
 
 # ── 网格参数（通用）──────────────────────────────────────────
 GRID_COUNT          = 5

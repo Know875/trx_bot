@@ -65,8 +65,11 @@ def _load_state():
 
 
 def _save_state(state):
-    with open(STATE_FILE, "w") as f:
+    # 原子写入：先写临时文件再 rename，防止中途 kill 导致文件损坏
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w") as f:
         json.dump(state, f, indent=2, ensure_ascii=False, default=str)
+    os.replace(tmp, STATE_FILE)
 
 
 # ═══════════════════════════════════════════════════════════

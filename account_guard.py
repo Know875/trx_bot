@@ -15,20 +15,22 @@
   guard = Guard()
   guard.check()  # 每次交易前调用
   guard.add_trade(coin, pnl)  # 记录每笔交易
+
+状态存储: SQLite (bot_state.db) — WAL 模式，跨线程安全，自动从 JSON 迁移
 """
 
-import json, os, logging, time, threading
-from datetime import datetime, timezone
+import logging, threading
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import config
+from state_db import GuardStateDB, datetime_str
 
 ROOT = Path(__file__).parent
-GUARD_FILE = str(ROOT / "guard_state.json")
 
 logger = logging.getLogger("guard")
 
-# 进程内全局锁：多个币种线程 + web 请求会共用同一份 guard_state.json，
+# 进程内全局锁：多个币种线程 + web 请求会共用同一份状态，
 # 保护「读-改-写」临界区，避免并发下日亏统计丢更新。
 _GUARD_LOCK = threading.RLock()
 
@@ -88,50 +90,25 @@ COIN_DAILY_BUDGET = {
 
 
 class Guard:
-    """账户守护者 — 每次交易前 call guard.check()"""
+    """账户守护者 — 每次交易前 call guard.check()。底层 SQLite 存储。"""
 
     def __init__(self, total_capital: float = None):
-        # 统一引用 config.TOTAL_CAPITAL，避免与 COIN_CONFIG / 回撤口径不一致
         self.total_capital = total_capital or getattr(config, "TOTAL_CAPITAL", 500)
-        self._load()
+        self._db = GuardStateDB()
+        # 首次或跨日时初始化
+        date = self._db.get("date", "")
+        if date != str(datetime.now(timezone.utc).date()):
+            self._new_day()
 
-    def _load(self):
-        if os.path.exists(GUARD_FILE):
-            try:
-                with open(GUARD_FILE) as f:
-                    self.state = json.load(f)
-            except Exception as e:
-                # 文件损坏 → 备份并重建
-                import logging as _logging
-                _logging.getLogger("account_guard").warning(
-                    f"guard_state.json 损坏，备份后重建: {e}")
-                try:
-                    backup = GUARD_FILE + ".corrupted." + str(int(time.time()))
-                    os.rename(GUARD_FILE, backup)
-                except:
-                    pass
-                self.state = self._new_day()
-        else:
-            self.state = self._new_day()
-
-    def _save(self):
-        # 原子写入：先写临时文件再 rename，防止中途 kill 导致文件损坏
-        tmp = GUARD_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(self.state, f, indent=2, ensure_ascii=False, default=str)
-        os.replace(tmp, GUARD_FILE)
-
-    def _new_day(self) -> dict:
-        return {
-            "date": str(datetime.now(timezone.utc).date()),
-            "total_capital": self.total_capital,
-            "daily_pnl": 0.0,
-            "trades": [],
-            "per_coin": {},
-            "coin_cooled_until": {},
-            "alerts": [],
-            "status": "normal",  # normal | warn | protect | halt
-        }
+    def _new_day(self):
+        self._db.set("date", str(datetime.now(timezone.utc).date()))
+        self._db.set("total_capital", str(self.total_capital))
+        self._db.set("daily_pnl", "0.0")
+        self._db.set("status", "normal")
+        # 清理旧日数据（per_coin / coin_cooled_until 重置）
+        self._db.set_json("per_coin", {})
+        self._db.set_json("coin_cooled_until", {})
+        self._db.set_json("alerts", [])
 
     # ═══════════════════════════════════════════════════════
     # 核心方法
@@ -141,14 +118,13 @@ class Guard:
     def check(self) -> dict:
         """
         每次策略循环前调用。
-        返回 {'allowed': bool, 'mode': str, 'restrictions': list, 'reason': str}
+        返回 {'allowed': bool, 'mode': str, 'restrictions': list, 'reason': str, 'status': str}
         """
         today = str(datetime.now(timezone.utc).date())
-        if self.state.get("date") != today:
-            self.state = self._new_day()
+        if self._db.get("date", "") != today:
+            self._new_day()
 
-        s = self.state
-        daily_pnl = s.get("daily_pnl", 0)
+        daily_pnl = self._db.get_float("daily_pnl", 0)
         daily_pnl_pct = daily_pnl / self.total_capital
 
         result = {"allowed": True, "mode": "normal", "restrictions": [], "reason": "", "status": "normal"}
@@ -160,13 +136,10 @@ class Guard:
             result["status"] = "halt"
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_HALT:.0%}，强制停止所有开仓"
             result["restrictions"] = ["no_open", "close_only", "alert_critical"]
-            s["status"] = "halt"
-            s.setdefault("alerts", []).append({
-                "time": datetime.now(timezone.utc).isoformat(),
-                "level": "critical",
-                "msg": result["reason"],
-            })
-            self._save()
+            self._db.set("status", "halt")
+            alerts = self._db.get_json("alerts", [])
+            alerts.append({"time": datetime_str(), "level": "critical", "msg": result["reason"]})
+            self._db.set_json("alerts", alerts)
             return result
 
         # ── L2 保护模式 ──
@@ -175,13 +148,10 @@ class Guard:
             result["status"] = "protect"
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_PROTECT:.0%}，进入保护模式"
             result["restrictions"] = ["reduce_position", "widen_grid", "confirm_open"]
-            s["status"] = "protect"
-            s.setdefault("alerts", []).append({
-                "time": datetime.now(timezone.utc).isoformat(),
-                "level": "warning",
-                "msg": result["reason"],
-            })
-            self._save()
+            self._db.set("status", "protect")
+            alerts = self._db.get_json("alerts", [])
+            alerts.append({"time": datetime_str(), "level": "warning", "msg": result["reason"]})
+            self._db.set_json("alerts", alerts)
             return result
 
         # ── L1 预警 ──
@@ -190,36 +160,32 @@ class Guard:
             result["status"] = "warn"
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_WARN:.0%}，暂停新增仓位"
             result["restrictions"] = ["no_new_positions"]
-            s["status"] = "warn"
-            s.setdefault("alerts", []).append({
-                "time": datetime.now(timezone.utc).isoformat(),
-                "level": "info",
-                "msg": result["reason"],
-            })
-            self._save()
+            self._db.set("status", "warn")
+            alerts = self._db.get_json("alerts", [])
+            alerts.append({"time": datetime_str(), "level": "info", "msg": result["reason"]})
+            self._db.set_json("alerts", alerts)
             return result
 
-        s["status"] = "normal"
-        self._save()
+        self._db.set("status", "normal")
         return result
 
     @_synchronized
     def add_trade(self, coin: str, pnl: float):
         """记录一笔交易"""
         today = str(datetime.now(timezone.utc).date())
-        if self.state.get("date") != today:
-            self.state = self._new_day()
+        if self._db.get("date", "") != today:
+            self._new_day()
 
-        s = self.state
-        s["daily_pnl"] = s.get("daily_pnl", 0) + pnl
-        s.setdefault("trades", []).append({
-            "coin": coin,
-            "pnl": round(pnl, 4),
-            "time": datetime.now(timezone.utc).isoformat(),
-        })
+        # 累加日盈亏
+        daily_pnl = self._db.get_float("daily_pnl", 0) + pnl
+        self._db.set("daily_pnl", str(daily_pnl))
+
+        # 写入交易记录
+        self._db.add_trade(coin, pnl)
 
         # 更新币种统计
-        pc = s.setdefault("per_coin", {}).setdefault(coin, {
+        per_coin = self._db.get_json("per_coin", {})
+        pc = per_coin.setdefault(coin, {
             "total_pnl": 0, "total_trades": 0, "wins": 0, "losses": 0,
             "consecutive_losses": 0, "cooled": False,
         })
@@ -231,8 +197,7 @@ class Guard:
         else:
             pc["losses"] += 1
             pc["consecutive_losses"] += 1
-
-        self._save()
+        self._db.set_json("per_coin", per_coin)
 
     @_synchronized
     def coin_check(self, coin: str) -> dict:
@@ -241,15 +206,15 @@ class Guard:
         返回 {'allowed': bool, 'reason': str}
         """
         today = str(datetime.now(timezone.utc).date())
-        if self.state.get("date") != today:
-            self.state = self._new_day()
+        if self._db.get("date", "") != today:
+            self._new_day()
 
-        s = self.state
         result = {"allowed": True, "reason": ""}
         now = datetime.now(timezone.utc)
 
         # 检查币种冷却
-        cooled_until_str = s.get("coin_cooled_until", {}).get(coin)
+        coin_cooled = self._db.get_json("coin_cooled_until", {})
+        cooled_until_str = coin_cooled.get(coin)
         if cooled_until_str:
             cooled_until = _safe_parse_dt(cooled_until_str)
             if cooled_until and now < cooled_until:
@@ -259,15 +224,18 @@ class Guard:
                 return result
 
         # 检查连续亏损
-        pc = s.get("per_coin", {}).get(coin, {})
+        per_coin = self._db.get_json("per_coin", {})
+        pc = per_coin.get(coin, {})
         cons = pc.get("consecutive_losses", 0)
         if cons >= CONSECUTIVE_LOSS_MAX:
-            cooled_until = now + __import__('datetime').timedelta(hours=CONSECUTIVE_COOLDOWN_H)
-            s.setdefault("coin_cooled_until", {})[coin] = cooled_until.isoformat()
+            cooled_until = now + timedelta(hours=CONSECUTIVE_COOLDOWN_H)
+            coin_cooled[coin] = cooled_until.isoformat()
+            self._db.set_json("coin_cooled_until", coin_cooled)
             result["allowed"] = False
             result["reason"] = f"{coin} 连续亏损 {cons} 笔，冷却 {CONSECUTIVE_COOLDOWN_H}h"
             pc["cooled"] = True
-            self._save()
+            per_coin[coin] = pc
+            self._db.set_json("per_coin", per_coin)
             return result
 
         # 检查币种预算
@@ -284,19 +252,20 @@ class Guard:
     def status_report(self) -> dict:
         """完整的守护者状态报告"""
         today = str(datetime.now(timezone.utc).date())
-        if self.state.get("date") != today:
-            self.state = self._new_day()
+        if self._db.get("date", "") != today:
+            self._new_day()
 
-        s = self.state
-        daily_pnl = s.get("daily_pnl", 0)
+        daily_pnl = self._db.get_float("daily_pnl", 0)
         daily_pnl_pct = daily_pnl / self.total_capital
 
+        per_coin = self._db.get_json("per_coin", {})
+        coin_cooled = self._db.get_json("coin_cooled_until", {})
         per_coin_status = {}
-        for coin, pc in s.get("per_coin", {}).items():
+        for coin, pc in per_coin.items():
             total = pc.get("total_trades", 0)
             wins = pc.get("wins", 0)
             wr = wins / total * 100 if total > 0 else 0
-            cooled = s.get("coin_cooled_until", {}).get(coin)
+            cooled = coin_cooled.get(coin)
             per_coin_status[coin] = {
                 "pnl": pc.get("total_pnl", 0),
                 "trades": total,
@@ -310,9 +279,9 @@ class Guard:
             "total_capital": self.total_capital,
             "daily_pnl": round(daily_pnl, 2),
             "daily_pnl_pct": round(daily_pnl_pct * 100, 2),
-            "status": s.get("status", "normal"),
-            "total_trades": len(s.get("trades", [])),
-            "alerts": s.get("alerts", [])[-5:],
+            "status": self._db.get("status", "normal"),
+            "total_trades": self._db.count_today_trades(),
+            "alerts": self._db.get_json("alerts", [])[-5:],
             "per_coin": per_coin_status,
         }
 
