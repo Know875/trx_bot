@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Coin Bot Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  body { background:#020617; font-family:'Inter',system-ui,sans-serif; }
+  .card    { background:#0f172a; border:1px solid #1e293b; border-radius:12px; }
+  .card-sm { background:#0f172a; border:1px solid #1e293b; border-radius:8px; }
+  .pulse-dot::before {
+    content:'';display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#22c55e;margin-right:6px;
+    animation:pulse 1.5s ease-in-out infinite;
+    box-shadow:0 0 0 0 rgba(34,197,94,.4);
+  }
+  @keyframes pulse {
+    0%  { box-shadow:0 0 0 0 rgba(34,197,94,.4); }
+    70% { box-shadow:0 0 0 8px rgba(34,197,94,0); }
+    100%{ box-shadow:0 0 0 0 rgba(34,197,94,0); }
+  }
+  .dead-dot::before {
+    content:'';display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#ef4444;margin-right:6px;
+  }
+  .ticker-flash { animation:flash .4s ease-out; }
+  @keyframes flash { 0%{color:#fbbf24} 100%{color:inherit} }
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-track{background:#0f172a}
+  ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+  .regime-ranging     { background:rgba(99,102,241,.15); color:#818cf8; border:1px solid rgba(99,102,241,.3); }
+  .regime-trending_up { background:rgba(34,197,94,.12);  color:#4ade80; border:1px solid rgba(34,197,94,.3); }
+  .regime-trending_down{ background:rgba(239,68,68,.12); color:#f87171; border:1px solid rgba(239,68,68,.3); }
+  .regime-wait        { background:rgba(100,116,139,.15);color:#94a3b8; border:1px solid rgba(100,116,139,.3); }
+  .log-terminal {
+    background:#020617;color:#94a3b8;font-family:'JetBrains Mono',monospace;
+    font-size:11px;line-height:1.6;padding:12px;
+    border-radius:8px;border:1px solid #1e293b;
+    height:220px;overflow-y:auto;
+  }
+  .log-err  { color:#f87171; }
+  .log-warn { color:#fbbf24; }
+  .log-info { color:#94a3b8; }
+  .log-ok   { color:#4ade80; }
+  .order-buy  { background:rgba(34,197,94,.1);  color:#4ade80; }
+  .order-sell { background:rgba(239,68,68,.1);  color:#f87171; }
+  .tab-btn { background:#1e293b; color:#94a3b8; border:1px solid #334155; border-radius:8px;
+             padding:6px 18px; font-size:13px; font-weight:600; transition:all .15s; cursor:pointer; }
+  .tab-btn:hover { background:#334155; color:#e2e8f0; }
+  .tab-active { background:#4f46e5 !important; color:#fff !important; border-color:#4f46e5 !important; }
+  .hdr-ticker { cursor:pointer; transition:opacity .2s; padding:4px 10px; border-radius:8px; }
+  .hdr-ticker:hover { background:rgba(255,255,255,.05); }
+  .hdr-ticker.active { background:rgba(99,102,241,.15); }
+  .futures-only { display:none; }
+  .spot-only    { display:block; }
+  body.swap-mode .futures-only { display:block; }
+  body.swap-mode .spot-only    { display:none; }
+  .lever-btn { background:#1e293b; border:1px solid #334155; border-radius:6px;
+               padding:3px 10px; font-size:12px; font-weight:700; color:#94a3b8;
+               cursor:pointer; transition:all .15s; }
+  .lever-btn:hover  { background:#334155; color:#e2e8f0; }
+  .lever-btn.active { background:#7c3aed; border-color:#7c3aed; color:#fff; }
+  .trade-side-btn { flex:1; padding:8px 0; font-size:13px; font-weight:700;
+                    border-radius:8px; border:none; cursor:pointer; transition:all .15s; }
+  .trade-side-btn.long  { background:rgba(34,197,94,.15); color:#4ade80; border:1px solid rgba(34,197,94,.3); }
+  .trade-side-btn.short { background:rgba(239,68,68,.15); color:#f87171; border:1px solid rgba(239,68,68,.3); }
+  .trade-side-btn.long.active  { background:#16a34a; color:#fff; border-color:#16a34a; }
+  .trade-side-btn.short.active { background:#dc2626; color:#fff; border-color:#dc2626; }
+  .risk-bar-wrap { width:100%; height:6px; background:#1e293b; border-radius:3px; overflow:hidden; }
+  .risk-bar      { height:100%; border-radius:3px; transition:width .4s; }
+  .ov-card { background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:10px 14px; }
+</style>
+</head>
+<body class="min-h-screen text-slate-200">
+
+<!-- ── Header ───────────────────────────────────────────────── -->
+<header class="flex items-center justify-between px-6 py-3 border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-10">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-violet-600 flex items-center justify-center text-white font-bold text-sm">M</div>
+    <span class="font-semibold text-white">Multi-Coin Bot</span>
+    <span id="bot-status" class="text-xs px-2 py-0.5 rounded-full dead-dot text-slate-400 border border-slate-700 flex items-center">离线</span>
+  </div>
+  <!-- 三币种实时价格 -->
+  <div class="flex items-center gap-2">
+    <div id="hdr-TRX" class="hdr-ticker active text-center" onclick="switchCoin('TRX')">
+      <div class="text-slate-500 text-xs">TRX/USDT</div>
+      <div id="price-TRX" class="font-mono font-bold text-white text-sm leading-none">—</div>
+      <div id="change-TRX" class="font-mono text-xs text-slate-400">—</div>
+    </div>
+    <div class="w-px h-10 bg-slate-800"></div>
+    <div id="hdr-ETH" class="hdr-ticker text-center" onclick="switchCoin('ETH')">
+      <div class="text-slate-500 text-xs">ETH/USDT</div>
+      <div id="price-ETH" class="font-mono font-bold text-white text-sm leading-none">—</div>
+      <div id="change-ETH" class="font-mono text-xs text-slate-400">—</div>
+    </div>
+    <div class="w-px h-10 bg-slate-800"></div>
+    <div id="hdr-SOL" class="hdr-ticker text-center" onclick="switchCoin('SOL')">
+      <div class="text-slate-500 text-xs">SOL/USDT</div>
+      <div id="price-SOL" class="font-mono font-bold text-white text-sm leading-none">—</div>
+      <div id="change-SOL" class="font-mono text-xs text-slate-400">—</div>
+    </div>
+    <div class="w-px h-10 bg-slate-800 ml-2"></div>
+    <button onclick="refreshAll()" class="ml-2 text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">刷新</button>
+  </div>
+</header>
+
+<main class="p-4 space-y-4 max-w-[1600px] mx-auto">
+
+  <!-- ── Coin Tabs ─────────────────────────────────────────── -->
+  <div class="flex flex-wrap items-center gap-2">
+    <button id="tab-TRX"      onclick="switchCoin('TRX')"      class="tab-btn tab-active">TRX 现货</button>
+    <button id="tab-ETH"      onclick="switchCoin('ETH')"      class="tab-btn">ETH 现货</button>
+    <button id="tab-SOL"      onclick="switchCoin('SOL')"      class="tab-btn">SOL 现货</button>
+    <div class="w-px h-6 bg-slate-700 mx-1"></div>
+    <button id="tab-TRX_SWAP" onclick="switchCoin('TRX_SWAP')" class="tab-btn" style="border-color:#7c3aed55">TRX 合约</button>
+    <button id="tab-ETH_SWAP" onclick="switchCoin('ETH_SWAP')" class="tab-btn" style="border-color:#7c3aed55">ETH 合约</button>
+    <button id="tab-SOL_SWAP" onclick="switchCoin('SOL_SWAP')" class="tab-btn" style="border-color:#7c3aed55">SOL 合约</button>
+  </div>
+
+  <!-- ── 全币种总览 ───────────────────────────────────────── -->
+  <div id="section-overview" class="card p-3">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-semibold text-white">全币种总览</span>
+      <div class="flex items-center gap-2">
+        <span id="overview-updated" class="text-xs text-slate-600">—</span>
+        <button onclick="loadOverview()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+      </div>
+    </div>
+    <div id="overview-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      <div class="ov-card text-center text-slate-600 text-xs">加载中...</div>
+    </div>
+  </div>
+
+  <!-- ── KPI Cards ─────────────────────────────────────────── -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div class="card p-4">
+      <div class="text-xs text-slate-500 mb-1">已实现盈亏</div>
+      <div id="kpi-pnl" class="text-xl font-bold font-mono">—</div>
+      <div id="kpi-pnl-sub" class="text-xs text-slate-600 mt-1">Bot 累计收益</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500 mb-1">总收益率</div>
+      <div id="kpi-return" class="text-xl font-bold font-mono">—</div>
+      <div class="text-xs text-slate-600 mt-1">自初始资金</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500 mb-1">胜率</div>
+      <div id="kpi-winrate" class="text-xl font-bold font-mono">—</div>
+      <div id="kpi-wl" class="text-xs text-slate-600 mt-1">— 胜 / — 负</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500 mb-1">最大回撤</div>
+      <div id="kpi-dd" class="text-xl font-bold font-mono">—</div>
+      <div class="text-xs text-slate-600 mt-1">限制 10%</div>
+    </div>
+    <div class="card p-4">
+      <div id="kpi-balance-lbl" class="text-xs text-slate-500 mb-1"><span class="js-ccy">TRX</span> 持仓市值</div>
+      <div id="kpi-balance" class="text-xl font-bold font-mono text-slate-200">—</div>
+      <div id="kpi-balance-sub" class="text-xs text-slate-600 mt-1">持仓 — <span class="js-ccy">TRX</span></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500 mb-2">当前行情</div>
+      <div id="kpi-regime" class="inline-block text-sm font-semibold px-3 py-1 rounded-full regime-wait">等待</div>
+      <div id="kpi-trades" class="text-xs text-slate-600 mt-2">— 笔交易</div>
+    </div>
+  </div>
+
+  <!-- ── System Status ─────────────────────────────────────── -->
+  <div id="section-system" class="card p-3">
+    <div class="flex items-center justify-between">
+      <span class="text-xs font-semibold text-slate-400 tracking-wide uppercase">🔐 系统状态</span>
+      <span id="system-updated" class="text-xs text-slate-600">—</span>
+    </div>
+    <div id="system-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-3">
+      <!-- Bot 心跳 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">Bot 进程</div>
+        <div id="sys-bot-process" class="font-mono text-sm font-bold text-slate-300">—</div>
+      </div>
+      <!-- 账户防护 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">账户防护</div>
+        <div id="sys-guard-status" class="font-mono text-sm font-bold text-slate-300">—</div>
+        <div id="sys-guard-pnl" class="text-xs text-slate-600 mt-0.5">—</div>
+      </div>
+      <!-- 进化锁 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">进化锁</div>
+        <div id="sys-lock-status" class="font-mono text-sm font-bold">🔒</div>
+        <div id="sys-lock-reason" class="text-xs text-slate-600 mt-0.5">—</div>
+      </div>
+      <!-- 极端行情 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">极端行情</div>
+        <div id="sys-extreme-status" class="font-mono text-sm font-bold text-slate-300">—</div>
+        <div id="sys-extreme-detail" class="text-xs text-slate-600 mt-0.5">—</div>
+      </div>
+      <!-- 策略 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">策略</div>
+        <div id="sys-strategy-ok" class="font-mono text-sm font-bold text-green-400">—</div>
+        <div id="sys-strategy-blocked" class="text-xs text-slate-600 mt-0.5">—</div>
+      </div>
+      <!-- 审计 24h -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">审计 24h</div>
+        <div id="sys-audit-total" class="font-mono text-sm font-bold text-slate-300">—</div>
+        <div id="sys-audit-detail" class="text-xs text-slate-500 mt-0.5">—</div>
+      </div>
+      <!-- 冷却 -->
+      <div class="ov-card text-center">
+        <div class="text-slate-500 text-xs mb-1">冷却</div>
+        <div id="sys-cooldown-list" class="font-mono text-xs text-amber-400">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Charts Row ─────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+    <div class="card p-4 xl:col-span-3">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-semibold text-white">K 线图</span>
+          <span class="text-xs text-slate-500">15m · 最近100根</span>
+        </div>
+        <div class="flex items-center gap-4 text-xs text-slate-500">
+          <span class="flex items-center gap-1"><span class="w-4 h-0.5 bg-indigo-400 inline-block"></span>EMA20</span>
+          <span class="flex items-center gap-1"><span class="w-4 h-0.5 bg-amber-400 inline-block"></span>EMA60</span>
+        </div>
+      </div>
+      <div id="chart-candle" class="w-full" style="height:360px"></div>
+    </div>
+    <div class="xl:col-span-2 flex flex-col gap-4">
+      <div class="card p-4 flex-1">
+        <div class="text-sm font-semibold text-white mb-3">权益曲线</div>
+        <div style="height:160px;position:relative"><canvas id="chart-equity"></canvas></div>
+      </div>
+      <div class="card p-4">
+        <div class="text-sm font-semibold text-white mb-3">技术指标</div>
+        <div class="space-y-3">
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-slate-500">RSI (14)</span>
+              <span id="ind-rsi" class="font-mono text-slate-300">—</span>
+            </div>
+            <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div id="ind-rsi-bar" class="h-full rounded-full transition-all duration-500 bg-indigo-500" style="width:50%"></div>
+            </div>
+            <div class="flex justify-between text-xs mt-0.5 text-slate-700"><span>超卖 30</span><span>超买 70</span></div>
+          </div>
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">ATR (14)</span>
+            <span id="ind-atr" class="font-mono text-slate-300">—</span>
+          </div>
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">ATR %</span>
+            <span id="ind-atr-pct" class="font-mono text-slate-300">—</span>
+          </div>
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">BB 宽度</span>
+            <span id="ind-bbw" class="font-mono text-slate-300">—</span>
+          </div>
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-500">EMA20 偏离 EMA60</span>
+            <span id="ind-emadiff" class="font-mono">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PnL Bar + Strategy Breakdown ──────────────────────── -->
+  <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+    <div class="card p-4 xl:col-span-3">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-semibold text-white">逐笔盈亏</span>
+        <span class="text-xs text-slate-500">最近 50 笔</span>
+      </div>
+      <div style="height:180px;position:relative"><canvas id="chart-pnl-bar"></canvas></div>
+    </div>
+    <div class="card p-4 xl:col-span-2">
+      <div class="text-sm font-semibold text-white mb-4">策略分析</div>
+      <div class="grid grid-cols-2 gap-3">
+        <!-- 现货：网格 + 趋势 -->
+        <div id="strat-card-grid" class="card-sm p-3 spot-only">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full bg-violet-400 inline-block"></span>
+            <span class="text-xs font-semibold text-violet-300">网格策略</span>
+          </div>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">交易次数</span><span id="strat-grid-count" class="font-mono text-slate-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">胜率</span><span id="strat-grid-wr" class="font-mono text-violet-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">累计盈亏</span><span id="strat-grid-pnl" class="font-mono">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">均笔盈亏</span><span id="strat-grid-avg" class="font-mono">—</span></div>
+          </div>
+        </div>
+        <div id="strat-card-trend" class="card-sm p-3 spot-only">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full bg-sky-400 inline-block"></span>
+            <span class="text-xs font-semibold text-sky-300">趋势策略</span>
+          </div>
+          <div class="space-y-1 text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">交易次数</span><span id="strat-trend-count" class="font-mono text-slate-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">胜率</span><span id="strat-trend-wr" class="font-mono text-sky-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">累计盈亏</span><span id="strat-trend-pnl" class="font-mono">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">均笔盈亏</span><span id="strat-trend-avg" class="font-mono">—</span></div>
+          </div>
+        </div>
+        <!-- 合约：futures_trend -->
+        <div id="strat-card-futures" class="col-span-2 card-sm p-3 futures-only hidden">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+            <span class="text-xs font-semibold text-amber-300">合约趋势策略</span>
+          </div>
+          <div class="grid grid-cols-4 gap-3 text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">交易次数</span><span id="strat-futures-count" class="font-mono text-slate-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">胜率</span><span id="strat-futures-wr" class="font-mono text-amber-300">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">累计盈亏</span><span id="strat-futures-pnl" class="font-mono">—</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">均笔盈亏</span><span id="strat-futures-avg" class="font-mono">—</span></div>
+          </div>
+        </div>
+        <div class="col-span-2 card-sm p-3">
+          <div class="grid grid-cols-3 gap-2 text-xs text-center">
+            <div><div class="text-slate-500 mb-1">最佳</div><div id="best-trade" class="font-mono text-emerald-400">—</div></div>
+            <div><div class="text-slate-500 mb-1">均值</div><div id="avg-trade" class="font-mono text-slate-300">—</div></div>
+            <div><div class="text-slate-500 mb-1">最差</div><div id="worst-trade" class="font-mono text-red-400">—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Spot Position ─────────────────────────────────────── -->
+  <div id="section-spot-pos" class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-white">当前持仓</span>
+      <button onclick="loadPosition()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+    </div>
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-8 flex-wrap">
+        <div>
+          <div class="text-xs text-slate-500 mb-0.5">USDT 余额</div>
+          <div id="pos-usdt" class="font-mono font-bold text-amber-400 text-lg">—</div>
+          <div class="text-xs text-slate-600 mt-0.5">总权益 <span id="pos-equity" class="font-mono text-slate-400">—</span></div>
+        </div>
+        <div class="w-px h-8 bg-slate-700"></div>
+        <div>
+          <div class="text-xs text-slate-500 mb-0.5">总持仓</div>
+          <div id="pos-total" class="font-mono font-bold text-white text-lg">—</div>
+          <div class="text-xs text-slate-600 mt-0.5">可用 <span id="pos-avail" class="font-mono">—</span></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-0.5">持仓均价</div>
+          <div id="pos-avg-px" class="font-mono text-slate-300">—</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-0.5">持仓市值</div>
+          <div id="pos-value" class="font-mono text-slate-300">—</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 mb-0.5">浮动盈亏</div>
+          <div id="pos-unrealized" class="font-mono font-semibold">—</div>
+        </div>
+      </div>
+      <button id="btn-close-pos" onclick="closePosition()"
+        class="text-xs px-3 py-1.5 rounded bg-red-900/60 text-red-400 border border-red-800/60 hover:bg-red-800/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+        一键平仓
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Futures Position ───────────────────────────────────── -->
+  <div id="section-futures-pos" class="card p-4 hidden">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-white">合约持仓</span>
+      <button onclick="loadFuturesPosition()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-6 text-sm">
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">持仓张数</div>
+            <div id="fpos-contracts" class="font-mono font-bold text-white text-lg">—</div>
+            <div id="fpos-side-badge" class="text-xs mt-0.5">—</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">开仓均价</div>
+            <div id="fpos-avg-px" class="font-mono text-slate-300">—</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">标记价格</div>
+            <div id="fpos-price" class="font-mono text-slate-300">—</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">浮动盈亏</div>
+            <div id="fpos-upl" class="font-mono font-semibold">—</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">强平价</div>
+            <div id="fpos-liq" class="font-mono text-amber-400">—</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-0.5">保证金 / 杠杆</div>
+            <div id="fpos-margin" class="font-mono text-slate-300">—</div>
+          </div>
+        </div>
+        <button id="btn-close-futures" onclick="closeFuturesPosition()"
+          class="ml-6 text-xs px-3 py-1.5 rounded bg-red-900/60 text-red-400 border border-red-800/60 hover:bg-red-800/60 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+          一键平仓
+        </button>
+      </div>
+      <!-- 强平距离进度条 -->
+      <div id="fpos-risk-wrap" class="hidden">
+        <div class="flex justify-between text-xs text-slate-500 mb-1">
+          <span>强平风险</span>
+          <span id="fpos-risk-label">—</span>
+        </div>
+        <div class="risk-bar-wrap">
+          <div id="fpos-risk-bar" class="risk-bar bg-emerald-500" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Futures Operation Panel (SWAP only) ────────────────── -->
+  <div id="section-futures-panel" class="futures-only hidden grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <!-- 合约信息 + 资金费率 -->
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-white mb-3">合约信息</div>
+      <div class="space-y-3 text-xs">
+        <div class="flex justify-between items-center">
+          <span class="text-slate-500">资金费率（当前）</span>
+          <span id="fund-rate" class="font-mono font-semibold">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-500">预测下次费率</span>
+          <span id="fund-next" class="font-mono text-slate-300">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-500">下次结算时间</span>
+          <span id="fund-time" class="text-slate-400">—</span>
+        </div>
+        <div class="border-t border-slate-800 pt-3 flex justify-between items-center">
+          <span class="text-slate-500">保证金模式</span>
+          <span class="px-2 py-0.5 rounded bg-violet-900/40 text-violet-300 text-xs font-semibold">逐仓</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-slate-500">当前账户余额</span>
+          <span id="fund-balance" class="font-mono text-slate-300">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 杠杆调整 -->
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-white mb-3">调整杠杆</div>
+      <div class="flex flex-wrap gap-2 mb-3" id="lever-preset-btns">
+        <button onclick="selectLever(1)"   class="lever-btn">1x</button>
+        <button onclick="selectLever(2)"   class="lever-btn">2x</button>
+        <button onclick="selectLever(3)"   class="lever-btn">3x</button>
+        <button onclick="selectLever(5)"   class="lever-btn active">5x</button>
+        <button onclick="selectLever(10)"  class="lever-btn">10x</button>
+        <button onclick="selectLever(20)"  class="lever-btn">20x</button>
+        <button onclick="selectLever(50)"  class="lever-btn">50x</button>
+        <button onclick="selectLever(100)" class="lever-btn">100x</button>
+      </div>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-slate-500">自定义</span>
+        <input id="lever-custom" type="number" min="1" max="125" value="5"
+          class="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-violet-500">
+        <span class="text-xs text-slate-500">x</span>
+      </div>
+      <button onclick="applyLeverage()"
+        class="w-full py-1.5 text-xs font-semibold rounded bg-violet-700 hover:bg-violet-600 text-white transition-colors">
+        应用杠杆
+      </button>
+      <div id="lever-result" class="text-xs text-slate-500 mt-2 text-center"></div>
+    </div>
+
+    <!-- 手动下单 -->
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-white mb-3">手动下单</div>
+      <!-- 方向选择 -->
+      <div class="flex gap-2 mb-3">
+        <button id="trade-btn-long"  onclick="selectTradeSide('long')"  class="trade-side-btn long active">开多</button>
+        <button id="trade-btn-short" onclick="selectTradeSide('short')" class="trade-side-btn short">开空</button>
+      </div>
+      <!-- 委托类型 -->
+      <div class="flex items-center gap-3 mb-3 text-xs">
+        <label class="flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="order-type" value="market" checked onchange="updatePriceInput()"> 市价
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer">
+          <input type="radio" name="order-type" value="limit" onchange="updatePriceInput()"> 限价
+        </label>
+      </div>
+      <!-- 委托价（限价才显示）-->
+      <div id="trade-price-row" class="hidden mb-3">
+        <div class="text-xs text-slate-500 mb-1">委托价</div>
+        <input id="trade-price" type="number" step="any" placeholder="输入价格"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-violet-500">
+      </div>
+      <!-- 张数 -->
+      <div class="mb-3">
+        <div class="text-xs text-slate-500 mb-1">张数</div>
+        <input id="trade-size" type="number" min="1" step="1" value="1" placeholder="合约张数"
+          class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-violet-500">
+      </div>
+      <button onclick="placeManualOrder()"
+        id="btn-manual-order"
+        class="w-full py-2 text-xs font-bold rounded transition-colors bg-emerald-700 hover:bg-emerald-600 text-white">
+        确认开多
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Open Orders ────────────────────────────────────────── -->
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-semibold text-white">挂单列表</span>
+        <span id="orders-count" class="text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">0</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="cancelAllOrders()" class="text-xs px-2 py-1 rounded bg-red-900/40 text-red-400 border border-red-800/40 hover:bg-red-800/50 transition-colors">撤销全部</button>
+        <button onclick="loadOrders()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-slate-500 border-b border-slate-800">
+            <th class="text-left py-2 pr-4 font-medium">订单号</th>
+            <th class="text-left py-2 pr-4 font-medium">方向</th>
+            <th class="text-right py-2 pr-4 font-medium">委托价</th>
+            <th class="text-right py-2 pr-4 font-medium">目标卖出价</th>
+            <th class="text-right py-2 pr-4 font-medium">数量</th>
+            <th class="text-right py-2 pr-4 font-medium">时间</th>
+            <th class="text-right py-2 font-medium">操作</th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody" class="divide-y divide-slate-800/50">
+          <tr><td colspan="7" class="text-center py-4 text-slate-600">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Trade History ──────────────────────────────────────── -->
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-white">交易记录</span>
+      <span class="text-xs text-slate-500">最近 30 笔</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-slate-500 border-b border-slate-800">
+            <th class="text-left py-2 pr-4 font-medium">时间</th>
+            <th class="text-left py-2 pr-4 font-medium">策略</th>
+            <th class="text-right py-2 pr-4 font-medium">单笔盈亏</th>
+            <th class="text-right py-2 font-medium">累计盈亏</th>
+          </tr>
+        </thead>
+        <tbody id="trades-tbody" class="divide-y divide-slate-800/50">
+          <tr><td colspan="4" class="text-center py-8 text-slate-600">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Futures Fills (SWAP only) ────────────────────────── -->
+  <div id="section-futures-fills" class="card p-4 futures-only hidden">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-white">成交记录（交易所）</span>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-500">最近 30 笔</span>
+        <button onclick="loadFuturesFills()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-slate-500 border-b border-slate-800">
+            <th class="text-left py-2 pr-4 font-medium">时间</th>
+            <th class="text-left py-2 pr-4 font-medium">方向</th>
+            <th class="text-right py-2 pr-4 font-medium">成交价</th>
+            <th class="text-right py-2 pr-4 font-medium">成交量（张）</th>
+            <th class="text-right py-2 pr-4 font-medium">平仓盈亏</th>
+            <th class="text-right py-2 font-medium">手续费</th>
+          </tr>
+        </thead>
+        <tbody id="fills-tbody" class="divide-y divide-slate-800/50">
+          <tr><td colspan="6" class="text-center py-4 text-slate-600">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Log Viewer ─────────────────────────────────────────── -->
+  <div class="card p-4">
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-semibold text-white">运行日志</span>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+          <input type="checkbox" id="log-autoscroll" checked class="rounded"> 自动滚动
+        </label>
+        <button onclick="loadLogs()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">刷新</button>
+      </div>
+    </div>
+    <div id="log-terminal" class="log-terminal"></div>
+  </div>
+
+</main>
+
+<script>
+// ── 币种配置 ─────────────────────────────────────────────────
+const COIN_META = {
+  TRX:      { precision: 5, minMove: 0.00001 },
+  ETH:      { precision: 2, minMove: 0.01 },
+  SOL:      { precision: 3, minMove: 0.001 },
+  TRX_SWAP: { precision: 5, minMove: 0.00001 },
+  ETH_SWAP: { precision: 2, minMove: 0.01 },
+  SOL_SWAP: { precision: 3, minMove: 0.001 },
+};
+const COINS      = ['TRX', 'ETH', 'SOL', 'TRX_SWAP', 'ETH_SWAP', 'SOL_SWAP'];
+const SPOT_COINS = ['TRX', 'ETH', 'SOL'];
+const SWAP_COINS = ['TRX_SWAP', 'ETH_SWAP', 'SOL_SWAP'];
+const isSwap = ccy => ccy.includes('_SWAP');
+const swapLabel = ccy => ccy.replace('_SWAP', '') + ' 合约';
+let currentCoin = 'TRX';
+const _cache = { stats:{}, trades:{}, candles:{}, orders:{}, overview:null };  // 客户端缓存
+
+// ── State ─────────────────────────────────────────────────────
+const BASE = window.location.origin;
+let candleChart = null, equityChart = null, pnlBarChart = null;
+
+// ── Helpers ───────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt   = (n, d=4) => (n == null ? '—' : n.toFixed(d));
+const pct   = n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+const fmtRunning = h => h < 1 ? '<1h' : h < 24 ? h.toFixed(0)+'h' : Math.floor(h/24)+'d '+Math.floor(h%24)+'h';
+const color = n => n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-slate-400';
+const sign  = n => (n > 0 ? '+' : '') + fmt(n);
+const fmtVol = v => v >= 1e6 ? (v/1e6).toFixed(2)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : v.toFixed(0);
+
+function setKpi(id, value, cls='') {
+  const el = $(id); if (!el) return;
+  el.textContent = value;
+  el.className = el.className.replace(/text-(emerald|red|slate|white)-\d+/g, '');
+  if (cls) el.classList.add(...cls.split(' '));
+}
+
+// ── API（自动附加 ccy 参数，支持缓存）────────────────────────
+async function api(path, cacheKey=null, ttl=8000) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = BASE + path + sep + 'ccy=' + currentCoin;
+  // 若提供了 cacheKey 且有未过期缓存，直接返回
+  if (cacheKey && _cache[cacheKey] && _cache[cacheKey][currentCoin]) {
+    const entry = _cache[cacheKey][currentCoin];
+    if (Date.now() - entry._ts < ttl) return entry._data;
+  }
+  const r = await fetch(url);
+  const data = await r.json();
+  if (cacheKey) {
+    if (!_cache[cacheKey]) _cache[cacheKey] = {};
+    _cache[cacheKey][currentCoin] = { _data: data, _ts: Date.now() };
+  }
+  return data;
+}
+
+// ── Tab / Coin 切换 ────────────────────────────────────────
+function switchCoin(ccy) {
+  if (currentCoin === ccy) return;
+  currentCoin = ccy;
+
+  COINS.forEach(c => {
+    const tab = $('tab-' + c);
+    if (tab) {
+      const active = c === ccy;
+      tab.className = 'tab-btn' + (active ? ' tab-active' : '');
+      if (active && isSwap(c)) tab.style.background = '#4c1d95';
+      else if (!active) tab.style.background = '';
+    }
+    const baseCcy = c.replace('_SWAP', '');
+    const hdr = $('hdr-' + baseCcy);
+    if (hdr && !isSwap(c)) {
+      hdr.className = 'hdr-ticker text-center' + (c === ccy ? ' active' : '');
+    }
+  });
+
+  const dispName = isSwap(ccy) ? swapLabel(ccy) : ccy;
+  document.querySelectorAll('.js-ccy').forEach(el => el.textContent = dispName);
+
+  // 切换 spot/swap 样式类（CSS .futures-only / .spot-only 通过 body class 控制）
+  if (isSwap(ccy)) {
+    document.body.classList.add('swap-mode');
+    $('section-spot-pos').classList.add('hidden');
+    $('section-futures-pos').classList.remove('hidden');
+    $('section-futures-panel').classList.remove('hidden');
+    $('section-futures-fills').classList.remove('hidden');
+  } else {
+    document.body.classList.remove('swap-mode');
+    $('section-spot-pos').classList.remove('hidden');
+    $('section-futures-pos').classList.add('hidden');
+    $('section-futures-panel').classList.add('hidden');
+    $('section-futures-fills').classList.add('hidden');
+  }
+
+  // 重建 K 线图（不同币种精度不同）
+  if (candleChart) { candleChart.remove(); candleChart = null; }
+  initCandleChart();
+
+  // 后台异步刷新（api() 内部有缓存，命中即瞬时返回）
+  refreshAll();
+}
+
+// ── Bot Status ───────────────────────────────────────────────
+async function loadStatus() {
+  const d = await api('/api/status');
+  const el = $('bot-status');
+  if (d.running) {
+    el.textContent = '运行中';
+    el.className = 'text-xs px-2 py-0.5 rounded-full pulse-dot text-emerald-400 border border-emerald-800/50 flex items-center';
+  } else {
+    el.textContent = '离线';
+    el.className = 'text-xs px-2 py-0.5 rounded-full dead-dot text-slate-400 border border-slate-700 flex items-center';
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────
+async function loadStats() {
+  const d = await api('/api/stats', 'stats', 5000);
+
+  const pnl  = d.realized_pnl;
+  const upnl = d.unrealized_pnl ?? 0;
+  setKpi('kpi-pnl', sign(pnl) + ' USDT', color(pnl) + ' text-xl font-bold font-mono');
+
+  const totalReturnPct = d.initial_capital > 0 ? (pnl + upnl) / d.initial_capital * 100 : 0;
+  setKpi('kpi-return', pct(totalReturnPct), color(totalReturnPct) + ' text-xl font-bold font-mono');
+  setKpi('kpi-winrate', d.win_rate + '%', 'text-xl font-bold font-mono text-violet-400');
+  $('kpi-wl').textContent = `${d.win_count} 胜 / ${d.loss_count} 负`;
+
+  const dd = d.drawdown;
+  setKpi('kpi-dd', '-' + fmt(dd, 2) + '%', (dd > 5 ? 'text-red-400' : 'text-slate-300') + ' text-xl font-bold font-mono');
+
+  if (d.mode === 'futures') {
+    const upl = d.unrealized_pnl ?? 0;
+    $('kpi-balance-lbl').textContent = '浮动盈亏';
+    setKpi('kpi-balance', (upl >= 0 ? '+' : '') + fmt(upl, 4) + ' U', color(upl) + ' text-xl font-bold font-mono');
+    $('kpi-balance-sub').textContent = `${d.contracts ?? 0}张 ${d.lever ?? '—'}x 杠杆`;
+  } else {
+    $('kpi-balance-lbl').innerHTML = `<span class="js-ccy">${currentCoin}</span> 持仓市值`;
+    setKpi('kpi-balance', fmt(d.coin_value ?? 0, 2) + ' USDT', 'text-xl font-bold font-mono text-slate-200');
+    $('kpi-balance-sub').innerHTML = `持仓 ${(d.coin_total ?? 0).toFixed(2)} <span class="js-ccy">${currentCoin}</span>`;
+    // 现货：更新持仓卡的 USDT 余额和总权益
+    if ($('pos-usdt')) {
+      $('pos-usdt').textContent  = fmt(d.balance ?? 0, 2) + ' USDT';
+      $('pos-equity').textContent = fmt(d.total_equity ?? 0, 2) + ' USDT';
+    }
+  }
+
+  $('kpi-trades').textContent = d.cleanup_count
+    ? `${d.trade_count} 笔交易（+${d.cleanup_count} 次清理）`
+    : `${d.trade_count} 笔交易`;
+
+  $('best-trade').textContent  = (d.best_trade  >= 0 ? '+' : '') + fmt(d.best_trade)  + ' USDT';
+  $('worst-trade').textContent = (d.worst_trade >= 0 ? '+' : '') + fmt(d.worst_trade) + ' USDT';
+  $('avg-trade').textContent   = (d.avg_trade   >= 0 ? '+' : '') + fmt(d.avg_trade)   + ' USDT';
+}
+
+// ── Regime Badge ──────────────────────────────────────────────
+const REGIME_LABEL = { ranging:'震荡', trending_up:'上升趋势', trending_down:'下跌趋势', wait:'等待' };
+function setRegime(regime) {
+  const el = $('kpi-regime');
+  el.textContent = REGIME_LABEL[regime] || regime;
+  el.className = `inline-block text-sm font-semibold px-3 py-1 rounded-full regime-${regime}`;
+}
+
+// ── Candle Chart ─────────────────────────────────────────────
+function initCandleChart() {
+  const container = $('chart-candle');
+  candleChart = LightweightCharts.createChart(container, {
+    layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#64748b' },
+    grid:   { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#1e293b' },
+    timeScale: { borderColor: '#1e293b', timeVisible: true, secondsVisible: false },
+    handleScroll: { mouseWheel: true, pressedMouseMove: true },
+    handleScale:  { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
+  });
+
+  const { precision, minMove } = COIN_META[currentCoin];
+  const priceFormat = { type: 'price', precision, minMove };
+
+  const candle = candleChart.addCandlestickSeries({
+    upColor: '#22c55e', downColor: '#ef4444',
+    borderVisible: false,
+    wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+    priceFormat,
+  });
+  const ema20 = candleChart.addLineSeries({ color: '#818cf8', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat });
+  const ema60 = candleChart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceFormat });
+  const volume = candleChart.addHistogramSeries({
+    priceFormat: { type: 'volume' }, priceScaleId: 'volume', color: '#334155',
+  });
+  candleChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+  candleChart._series = { candle, ema20, ema60, volume };
+
+  const ro = new ResizeObserver(() => candleChart.applyOptions({ width: container.clientWidth }));
+  ro.observe(container);
+}
+
+function updateCandleChart(candles) {
+  if (!candleChart) initCandleChart();
+  const s = candleChart._series;
+  s.candle.setData(candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
+  s.ema20.setData(candles.map(c => ({ time: c.time, value: c.ema20 })));
+  s.ema60.setData(candles.map(c => ({ time: c.time, value: c.ema60 })));
+  s.volume.setData(candles.map(c => ({
+    time: c.time, value: c.volume,
+    color: c.close >= c.open ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)',
+  })));
+  candleChart.timeScale().fitContent();
+}
+
+// ── Equity Chart ─────────────────────────────────────────────
+function initEquityChart(records) {
+  const ctx = $('chart-equity').getContext('2d');
+  if (equityChart) equityChart.destroy();
+  const trades  = records.filter(r => r.strategy !== 'cleanup');
+  const allPnl  = [0, ...trades.map(r => r.total_pnl).reverse()];
+  const labels  = ['初始', ...trades.map(r => r.time.slice(5, 16)).reverse()];
+  const isPos   = allPnl[allPnl.length - 1] >= 0;
+  const accent  = isPos ? '#22c55e' : '#ef4444';
+  equityChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ data: allPnl, borderColor: accent,
+      backgroundColor: isPos ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)',
+      fill: true, tension: 0.35, pointRadius: 0, borderWidth: 1.5 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor:'#0f172a', borderColor:'#1e293b', borderWidth:1,
+          titleColor:'#94a3b8', bodyColor:'#f8fafc',
+          callbacks: { label: ctx => `  ${(ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(4)} USDT` } } },
+      scales: { x: { display: false },
+        y: { grid: { color:'#1e293b' }, border: { color:'#1e293b' },
+          ticks: { color:'#64748b', font:{size:10}, callback: v => (v>=0?'+':'') + v.toFixed(2) } } },
+    },
+  });
+}
+
+// ── PnL Bar Chart ────────────────────────────────────────────
+function initPnlBarChart(records) {
+  const ctx = $('chart-pnl-bar').getContext('2d');
+  if (pnlBarChart) pnlBarChart.destroy();
+  const slice  = records.filter(r => r.strategy !== 'cleanup').slice(0, 50).reverse();
+  const data   = slice.map(r => r.pnl);
+  const labels = slice.map(r => r.time.slice(5, 16));
+  pnlBarChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ data, borderWidth: 1, borderRadius: 2,
+      backgroundColor: data.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)'),
+      borderColor:     data.map(v => v >= 0 ? '#22c55e' : '#ef4444') }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false },
+        tooltip: { backgroundColor:'#0f172a', borderColor:'#1e293b', borderWidth:1,
+          titleColor:'#94a3b8', bodyColor:'#f8fafc',
+          callbacks: { label: ctx => `  ${(ctx.raw >= 0 ? '+' : '') + ctx.raw.toFixed(4)} USDT` } } },
+      scales: { x: { display: false },
+        y: { grid: { color:'#1e293b' }, border: { color:'#1e293b' },
+          ticks: { color:'#64748b', font:{size:10}, callback: v => (v>=0?'+':'') + v.toFixed(3) } } },
+    },
+  });
+}
+
+// ── Strategy Stats ────────────────────────────────────────────
+function updateStrategyStats(records) {
+  const byStrat = {};
+  for (const r of records) {
+    if (r.strategy === 'cleanup') continue;
+    if (!byStrat[r.strategy]) byStrat[r.strategy] = [];
+    byStrat[r.strategy].push(r.pnl);
+  }
+  function fill(key, prefix) {
+    const arr  = byStrat[key] || [];
+    const wins = arr.filter(v => v > 0);
+    const tot  = arr.reduce((a, b) => a + b, 0);
+    const avg  = arr.length ? tot / arr.length : 0;
+    $(prefix+'-count').textContent = arr.length;
+    $(prefix+'-wr').textContent    = arr.length ? (wins.length/arr.length*100).toFixed(1)+'%' : '—';
+    const pe = $(prefix+'-pnl');
+    pe.textContent = arr.length ? (tot>=0?'+':'') + tot.toFixed(4)+' U' : '—';
+    pe.className = 'font-mono ' + (tot>=0 ? 'text-emerald-400':'text-red-400');
+    const ae = $(prefix+'-avg');
+    ae.textContent = arr.length ? (avg>=0?'+':'') + avg.toFixed(4)+' U' : '—';
+    ae.className = 'font-mono ' + (avg>=0 ? 'text-emerald-400':'text-red-400');
+  }
+  fill('grid',          'strat-grid');
+  fill('trend',         'strat-trend');
+  fill('futures_trend', 'strat-futures');
+}
+
+// ── Indicators ────────────────────────────────────────────────
+function updateIndicators(ind) {
+  if (!ind || !ind.rsi) return;
+  const rsi = ind.rsi;
+  $('ind-rsi').textContent = fmt(rsi, 1);
+  const bar = $('ind-rsi-bar');
+  bar.style.width = rsi + '%';
+  bar.className = 'h-full rounded-full transition-all duration-500 ' +
+    (rsi > 70 ? 'bg-red-500' : rsi < 30 ? 'bg-emerald-500' : 'bg-indigo-500');
+  $('ind-atr').textContent     = fmt(ind.atr, 6);
+  $('ind-atr-pct').textContent = fmt(ind.atr_pct * 100, 3) + '%';
+  $('ind-bbw').textContent     = fmt(ind.bb_width * 100, 3) + '%';
+  const diff = (ind.ema20 - ind.ema60) / ind.ema60 * 100;
+  const el = $('ind-emadiff');
+  el.textContent = (diff >= 0 ? '+' : '') + fmt(diff, 3) + '%';
+  el.className = 'font-mono text-xs ' + (diff > 0 ? 'text-emerald-400' : diff < 0 ? 'text-red-400' : 'text-slate-400');
+}
+
+// ── Trades Table ──────────────────────────────────────────────
+function updateTradesTable(records) {
+  const tbody = $('trades-tbody');
+  const trades = records.filter(r => r.strategy !== 'cleanup');
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-slate-600">暂无交易记录</td></tr>';
+    return;
+  }
+  const STRAT_LABEL = { grid:'网格', trend:'趋势', futures_trend:'合约趋势' };
+  const STRAT_COLOR = { grid:'bg-violet-900/40 text-violet-300', trend:'bg-sky-900/40 text-sky-300', futures_trend:'bg-amber-900/40 text-amber-300' };
+  tbody.innerHTML = trades.slice(0, 30).map(r => {
+    const pc = r.pnl > 0 ? 'text-emerald-400' : 'text-red-400';
+    const sc = STRAT_COLOR[r.strategy] || 'bg-slate-800 text-slate-400';
+    return `<tr class="hover:bg-slate-800/30 transition-colors">
+      <td class="py-2.5 pr-4 text-slate-400 font-mono text-xs">${r.time}</td>
+      <td class="py-2.5 pr-4"><span class="text-xs px-2 py-0.5 rounded-full ${sc}">${STRAT_LABEL[r.strategy]||r.strategy}</span></td>
+      <td class="py-2.5 pr-4 text-right font-mono text-sm ${pc}">${(r.pnl>=0?'+':'') + r.pnl.toFixed(4)}</td>
+      <td class="py-2.5 text-right font-mono text-sm ${r.total_pnl>=0?'text-slate-300':'text-red-400'}">${(r.total_pnl>=0?'+':'') + r.total_pnl.toFixed(4)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Spot Position ─────────────────────────────────────────────
+async function loadPosition() {
+  if (isSwap(currentCoin)) return;
+  const d = await api('/api/position');
+  const { precision } = COIN_META[currentCoin];
+  $('pos-total').textContent  = d.total != null ? d.total.toFixed(4) + ' ' + currentCoin : '—';
+  $('pos-avail').textContent  = d.avail != null ? d.avail.toFixed(4) + ' ' + currentCoin : '—';
+  $('pos-avg-px').textContent = d.avg_px > 0 ? d.avg_px.toFixed(precision) : '—';
+  $('pos-value').textContent  = d.value != null ? '≈ ' + d.value.toFixed(4) + ' USDT' : '—';
+  const upnl = d.unrealized_pnl ?? 0;
+  const uel  = $('pos-unrealized');
+  uel.textContent = d.total > 0 && d.avg_px > 0 ? (upnl >= 0 ? '+' : '') + upnl.toFixed(4) + ' USDT' : '—';
+  uel.className   = 'font-mono font-semibold ' + (upnl > 0 ? 'text-emerald-400' : upnl < 0 ? 'text-red-400' : 'text-slate-400');
+  $('btn-close-pos').disabled = !d.avail || d.avail < 0.0001;
+}
+
+async function closePosition() {
+  if (!confirm(`确认市价平仓全部 ${currentCoin} 持仓？`)) return;
+  const btn = $('btn-close-pos');
+  btn.disabled = true; btn.textContent = '平仓中...';
+  try {
+    const r = await fetch(BASE + '/api/position/close?ccy=' + currentCoin, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert('平仓失败: ' + (d.detail || r.status)); return; }
+    alert(`平仓成功：卖出 ${d.size} ${currentCoin} @ ${d.price}`);
+    loadPosition();
+  } catch(e) { alert('请求失败: ' + e); }
+  finally { btn.disabled = false; btn.textContent = '一键平仓'; }
+}
+
+// ── Futures Position ──────────────────────────────────────────
+const POS_SIDE_LABEL = { long: '多单', short: '空单', net: '净持仓' };
+const POS_SIDE_COLOR = { long: 'text-emerald-400', short: 'text-red-400', net: 'text-slate-400' };
+
+async function loadFuturesPosition() {
+  if (!isSwap(currentCoin)) return;
+  const d = await api('/api/futures/position');
+  const { precision } = COIN_META[currentCoin];
+
+  $('fpos-contracts').textContent = d.contracts != 0 ? d.contracts + ' 张' : '无持仓';
+  const badge = $('fpos-side-badge');
+  badge.textContent = POS_SIDE_LABEL[d.pos_side] || '—';
+  badge.className = 'text-xs font-semibold mt-0.5 ' + (POS_SIDE_COLOR[d.pos_side] || 'text-slate-400');
+
+  $('fpos-avg-px').textContent = d.avg_px > 0 ? d.avg_px.toFixed(precision) : '—';
+  $('fpos-price').textContent  = d.price  > 0 ? d.price.toFixed(precision)  : '—';
+
+  const uplEl = $('fpos-upl');
+  uplEl.textContent = d.contracts != 0 ? (d.upl >= 0 ? '+' : '') + fmt(d.upl, 4) + ' USDT' : '—';
+  uplEl.className   = 'font-mono font-semibold ' + (d.upl > 0 ? 'text-emerald-400' : d.upl < 0 ? 'text-red-400' : 'text-slate-400');
+
+  $('fpos-liq').textContent    = d.liq_px > 0 ? d.liq_px.toFixed(precision) : '—';
+  $('fpos-margin').textContent = d.contracts != 0 ? fmt(d.margin, 2) + ' U  ×' + d.lever : '—';
+
+  $('btn-close-futures').disabled = d.contracts == 0;
+
+  // 强平距离进度条
+  const riskWrap = $('fpos-risk-wrap');
+  if (d.contracts != 0 && d.liq_px > 0 && d.price > 0) {
+    riskWrap.classList.remove('hidden');
+    const dist = Math.abs(d.price - d.liq_px) / d.price;
+    const riskPct = Math.min(100, Math.max(0, (1 - dist / 0.3) * 100)); // 距离 < 30% 开始变红
+    const bar = $('fpos-risk-bar');
+    bar.style.width = riskPct + '%';
+    bar.className = `risk-bar ${riskPct > 70 ? 'bg-red-500' : riskPct > 40 ? 'bg-amber-500' : 'bg-emerald-500'}`;
+    $('fpos-risk-label').textContent = `距强平 ${(dist * 100).toFixed(2)}%`;
+  } else {
+    riskWrap.classList.add('hidden');
+  }
+}
+
+async function closeFuturesPosition() {
+  if (!confirm(`确认平仓全部 ${currentCoin} 合约持仓？`)) return;
+  const btn = $('btn-close-futures');
+  btn.disabled = true; btn.textContent = '平仓中...';
+  try {
+    const r = await fetch(BASE + '/api/futures/position/close?ccy=' + currentCoin, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert('平仓失败: ' + (d.detail || r.status)); return; }
+    alert('合约平仓指令已提交');
+    loadFuturesPosition();
+  } catch(e) { alert('请求失败: ' + e); }
+  finally { btn.disabled = false; btn.textContent = '一键平仓'; }
+}
+
+// ── 全币种总览 ──────────────────────────────────────────
+const REGIME_EMOJI = { ranging:'震荡', trending_up:'📈升', trending_down:'📉降', wait:'⏳' };
+
+async function loadOverview() {
+  try {
+    const r = await fetch(BASE + '/api/overview');
+    const all = await r.json();
+    _cache.overview = { _data: all, _ts: Date.now() };
+    $('overview-updated').textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    renderOverview(all);
+  } catch(e) {}
+}
+
+function renderOverview(all) {
+  if (!all) return;
+  const grid = $('overview-grid');
+  const cards = [];
+  for (const ccy of COINS) {
+    const d = all[ccy];
+    if (!d) continue;
+    const base = ccy.replace('_SWAP', '');
+    const isSw = ccy.includes('_SWAP');
+    const { precision } = COIN_META[ccy] || { precision: 4 };
+    const price = d.price || 0;
+    const pnlCls = d.realized_pnl > 0 ? 'text-emerald-400' : d.realized_pnl < 0 ? 'text-red-400' : 'text-slate-500';
+    const rCls = d.regime === 'trending_up' ? 'text-emerald-400' : d.regime === 'trending_down' ? 'text-red-400'
+               : d.regime === 'ranging' ? 'text-violet-400' : 'text-slate-500';
+    const modeBadge = isSw
+      ? '<span class="text-xs px-1 py-0 rounded bg-violet-900/40 text-violet-300">合约</span>'
+      : '<span class="text-xs px-1 py-0 rounded bg-slate-800 text-slate-400">现货</span>';
+    const chCls = d.change24h >= 0 ? 'text-emerald-400' : 'text-red-400';
+
+    // 持仓信息
+    let posInfo = '';
+    if (isSw && d.position && d.position.contracts != 0) {
+      const upCls = d.position.upl > 0 ? 'text-emerald-400' : 'text-red-400';
+      posInfo = `<div class="text-xs"><span class="text-slate-500">${d.position.contracts}张</span> <span class="${upCls}">${(d.position.upl>=0?'+':'')+fmt(d.position.upl,4)}</span></div>`;
+    } else if (!isSw && d.position && d.position.total > 0) {
+      posInfo = `<div class="text-xs text-slate-500">持仓 ${fmt(d.position.total,4)}</div>`;
+    }
+
+    cards.push(`<div class="ov-card cursor-pointer hover:border-violet-600/50 transition-colors" onclick="switchCoin('${ccy}')">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-xs font-semibold text-slate-300">${base}/USDT</span>
+        ${modeBadge}
+      </div>
+      <div class="flex justify-between text-xs mb-0.5">
+        <span class="font-mono font-bold text-white">${price > 0 ? price.toFixed(precision) : '—'}</span>
+        <span class="font-mono ${chCls}">${(d.change24h>=0?'+':'')+fmt(d.change24h,2)}%</span>
+      </div>
+      <div class="flex justify-between text-xs mb-1">
+        <span class="font-mono ${pnlCls}">${(d.realized_pnl>=0?'+':'')+fmt(d.realized_pnl,2)}U</span>
+        <span class="font-mono ${rCls} text-xs">${REGIME_EMOJI[d.regime]||'—'}</span>
+      </div>
+      <div class="flex justify-between text-xs mb-1">
+        <span class="text-slate-500">最大回撤 <span class="font-mono ${(d.max_drawdown||0)>8?'text-red-400':'text-slate-400'}">${fmt(d.max_drawdown,1)}%</span></span>
+        <span class="text-slate-500">盈利率 <span class="font-mono ${(d.total_return_pct||0)>=0?'text-emerald-400':'text-red-400'}">${(d.total_return_pct>=0?'+':'')+fmt(d.total_return_pct,2)}%</span></span>
+      </div>
+      <div class="flex justify-between text-xs">
+        <span class="text-slate-500">胜率 ${d.win_rate||0}%</span>
+        <span class="text-slate-500">${d.trade_count}笔</span>
+      </div>
+      <div class="text-xs text-slate-600 mt-0.5">运行 ${d.running_hours ? fmtRunning(d.running_hours) : '—'}</div>
+      ${posInfo}
+    </div>`);
+  }
+  grid.innerHTML = cards.join('');
+}
+
+// ── 后台预取所有币种缓存 ──────────────────────────────────
+function prefetchAll() {
+  COINS.forEach(ccy => {
+    const sep = '?';
+    // 预取 stats（每个币种）
+    fetch(BASE + '/api/stats' + sep + 'ccy=' + ccy).then(r => r.json()).then(d => {
+      if (!_cache.stats) _cache.stats = {};
+      _cache.stats[ccy] = { _data: d, _ts: Date.now() };
+    }).catch(()=>{});
+    // 预取 trades
+    fetch(BASE + '/api/trades' + sep + 'ccy=' + ccy).then(r => r.json()).then(d => {
+      if (!_cache.trades) _cache.trades = {};
+      _cache.trades[ccy] = { _data: d, _ts: Date.now() };
+    }).catch(()=>{});
+  });
+  loadOverview();
+}
+
+// ── 系统状态面板 ─────────────────────────────────────────
+async function loadSystemStatus() {
+  try {
+    const r = await fetch(BASE + '/api/system/status');
+    const d = await r.json();
+    $('system-updated').textContent = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+    // Bot 进程 + 心跳（合并一行）
+    const proc = d.bot_process || 'stopped';
+    const hb = d.last_heartbeat_sec || 9999;
+    const pColors = { running: 'text-emerald-400', stale: 'text-amber-400', stopped: 'text-red-400' };
+    const pLabels = { running: '运行中', stale: '卡顿', stopped: '已停止' };
+    const hbCls = hb < 90 ? 'text-emerald-500' : hb < 180 ? 'text-amber-500' : 'text-red-500';
+    const label = pLabels[proc] || proc;
+    const hbStr = hb < 9990 ? ' · ' + hb + 's 前' : '';
+    $('sys-bot-process').innerHTML =
+      '<span class="' + (pColors[proc] || 'text-red-400') + '">' + label + '</span>' +
+      '<span class="text-xs ml-1 ' + hbCls + '">' + hbStr + '</span>';
+
+    // 账户防护
+    const g = d.account_guard || {};
+    const gStat = g.status || 'unknown';
+    const gColors = { normal: 'text-emerald-400', protect: 'text-amber-400', halt: 'text-red-400' };
+    $('sys-guard-status').className = 'font-mono text-sm font-bold ' + (gColors[gStat] || 'text-slate-300');
+    $('sys-guard-status').textContent = gStat === 'normal' ? '正常' : gStat === 'protect' ? 'L2保护' : gStat === 'halt' ? 'L3强停' : '—';
+    $('sys-guard-pnl').textContent = (g.daily_pnl_pct || 0).toFixed(1) + '%';
+
+    // 进化锁
+    const ev = d.evolution_lock || {};
+    $('sys-lock-status').textContent = ev.locked ? '🔒 锁定' : '🟢 开放';
+    $('sys-lock-status').className = 'font-mono text-sm font-bold ' + (ev.locked ? 'text-red-400' : 'text-emerald-400');
+    $('sys-lock-reason').textContent = ev.manual_lock ? '人工锁' : (ev.reason || 'ok');
+
+    // 极端行情
+    const ext = d.extreme_market || {};
+    $('sys-extreme-status').textContent = ext.is_extreme ? '⚠️ 极端' : '正常';
+    $('sys-extreme-status').className = 'font-mono text-sm font-bold ' + (ext.is_extreme ? 'text-red-400' : 'text-emerald-400');
+    $('sys-extreme-detail').textContent = (ext.reasons || []).join(' ').slice(0, 30) || '无';
+
+    // 策略
+    const sg = d.strategy_guard || {};
+    let okCount = 0, blockedCount = 0;
+    for (const [coin, strats] of Object.entries(sg)) {
+      for (const [sname, r] of Object.entries(strats)) {
+        if (r.allowed) okCount++; else blockedCount++;
+      }
+    }
+    $('sys-strategy-ok').textContent = okCount + '正常';
+    $('sys-strategy-ok').className = 'font-mono text-sm font-bold ' + (blockedCount > 0 ? 'text-amber-400' : 'text-emerald-400');
+    $('sys-strategy-blocked').textContent = blockedCount > 0 ? blockedCount + '暂停/禁用' : '全部正常';
+
+    // 审计
+    const aud = d.audit_24h || {};
+    const aStat = aud.status || 'safe';
+    const aColors = { safe: 'text-emerald-400', warning: 'text-amber-400', alert: 'text-red-400' };
+    $('sys-audit-total').textContent = aud.total + '次尝试';
+    $('sys-audit-total').className = 'font-mono text-sm font-bold ' + (aColors[aStat] || 'text-slate-300');
+    $('sys-audit-detail').textContent = '回滚' + aud.rollback_ok + ' 拦截' + aud.blocked + (' 非回滚' + aud.non_rollback_ok);
+
+    // 冷却
+    const cd = d.coins_cooldown || {};
+    const cdList = Object.entries(cd).map(([c, i]) => c.replace('_SWAP','') + (i.consecutive_losses ? '×'+i.consecutive_losses : ''));
+    $('sys-cooldown-list').textContent = cdList.length > 0 ? cdList.join(' ') : '无';
+    $('sys-cooldown-list').className = 'font-mono text-xs ' + (cdList.length > 0 ? 'text-amber-400' : 'text-slate-500');
+  } catch(e) {}
+}
+
+// ── Futures Overview ──────────────────────────────────────────
+async function loadFuturesOverview() {
+  const r = await fetch(BASE + '/api/futures/overview');
+  const all = await r.json();
+  const grid = $('futures-overview-grid');
+  const LABEL = { long:'多', short:'空', net:'净', '':'—' };
+  const SIDE_COLOR = { long:'text-emerald-400', short:'text-red-400', net:'text-slate-400', '':'text-slate-600' };
+  grid.innerHTML = Object.entries(all).map(([ccy, d]) => {
+    const base  = ccy.replace('_SWAP', '');
+    const { precision } = COIN_META[ccy] || { precision: 4 };
+    const hasPos = d.contracts != 0;
+    const uplCls = d.upl > 0 ? 'text-emerald-400' : d.upl < 0 ? 'text-red-400' : 'text-slate-400';
+    return `<div class="ov-card cursor-pointer hover:border-violet-600/50 transition-colors" onclick="switchCoin('${ccy}')">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-semibold text-slate-300">${base}/USDT 合约</span>
+        ${hasPos ? `<span class="text-xs px-1.5 py-0.5 rounded ${d.pos_side==='long'?'bg-emerald-900/50 text-emerald-400':'bg-red-900/50 text-red-400'} font-bold">${LABEL[d.pos_side]}${d.lever}x</span>` : '<span class="text-xs text-slate-600">无持仓</span>'}
+      </div>
+      <div class="flex justify-between text-xs mb-1">
+        <span class="text-slate-500">价格</span>
+        <span class="font-mono text-slate-300">${d.price > 0 ? d.price.toFixed(precision) : '—'}</span>
+      </div>
+      ${hasPos ? `
+      <div class="flex justify-between text-xs mb-1">
+        <span class="text-slate-500">持仓</span>
+        <span class="font-mono text-slate-300">${d.contracts} 张</span>
+      </div>
+      <div class="flex justify-between text-xs">
+        <span class="text-slate-500">浮动盈亏</span>
+        <span class="font-mono font-semibold ${uplCls}">${(d.upl>=0?'+':'') + d.upl.toFixed(4)} U</span>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Funding Rate ──────────────────────────────────────────────
+async function loadFundingRate() {
+  if (!isSwap(currentCoin)) return;
+  const d = await api('/api/futures/funding');
+  const rate = d.funding_rate ?? 0;
+  const rateEl = $('fund-rate');
+  rateEl.textContent = (rate >= 0 ? '+' : '') + rate.toFixed(4) + '%';
+  rateEl.className = 'font-mono font-semibold ' + (rate > 0 ? 'text-red-400' : rate < 0 ? 'text-emerald-400' : 'text-slate-400');
+  const nextRate = d.next_funding_rate ?? 0;
+  const nextEl = $('fund-next');
+  nextEl.textContent = (nextRate >= 0 ? '+' : '') + nextRate.toFixed(4) + '%';
+  nextEl.className = 'font-mono ' + (nextRate > 0 ? 'text-red-400' : nextRate < 0 ? 'text-emerald-400' : 'text-slate-300');
+  if (d.funding_time) {
+    $('fund-time').textContent = new Date(d.funding_time).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'});
+  }
+  // 显示 USDT 余额
+  try {
+    const stats = await api('/api/stats');
+    $('fund-balance').textContent = fmt(stats.balance, 2) + ' USDT';
+  } catch(e) {}
+}
+
+// ── Leverage Control ──────────────────────────────────────────
+let selectedLever = 5;
+function selectLever(v) {
+  selectedLever = v;
+  $('lever-custom').value = v;
+  document.querySelectorAll('#lever-preset-btns .lever-btn').forEach(btn => {
+    btn.className = 'lever-btn' + (parseInt(btn.textContent) === v ? ' active' : '');
+  });
+}
+async function applyLeverage() {
+  const v = parseInt($('lever-custom').value);
+  if (!v || v < 1 || v > 125) { alert('杠杆范围 1~125'); return; }
+  const res = $('lever-result');
+  res.textContent = '提交中...'; res.className = 'text-xs text-slate-400 mt-2 text-center';
+  try {
+    const r = await fetch(`${BASE}/api/futures/leverage?ccy=${currentCoin}&lever=${v}&mgn_mode=isolated`, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { res.textContent = '失败: ' + (d.detail || r.status); res.className = 'text-xs text-red-400 mt-2 text-center'; return; }
+    res.textContent = `✓ 已设置 ${v}x 逐仓`;
+    res.className = 'text-xs text-emerald-400 mt-2 text-center';
+    selectLever(v);
+    setTimeout(() => { if (res) res.textContent = ''; }, 3000);
+  } catch(e) { res.textContent = '请求失败'; res.className = 'text-xs text-red-400 mt-2 text-center'; }
+}
+
+// ── Manual Order ──────────────────────────────────────────────
+let tradeSide = 'long';
+function selectTradeSide(side) {
+  tradeSide = side;
+  $('trade-btn-long').className  = 'trade-side-btn long'  + (side === 'long'  ? ' active' : '');
+  $('trade-btn-short').className = 'trade-side-btn short' + (side === 'short' ? ' active' : '');
+  const btn = $('btn-manual-order');
+  btn.textContent = side === 'long' ? '确认开多' : '确认开空';
+  btn.className = `w-full py-2 text-xs font-bold rounded transition-colors text-white ${
+    side === 'long' ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-red-700 hover:bg-red-600'
+  }`;
+}
+function updatePriceInput() {
+  const isLimit = document.querySelector('input[name="order-type"]:checked').value === 'limit';
+  $('trade-price-row').classList.toggle('hidden', !isLimit);
+}
+async function placeManualOrder() {
+  const size  = parseInt($('trade-size').value);
+  const oType = document.querySelector('input[name="order-type"]:checked').value;
+  const price = oType === 'limit' ? parseFloat($('trade-price').value) : null;
+  if (!size || size < 1) { alert('请输入有效张数'); return; }
+  if (oType === 'limit' && (!price || price <= 0)) { alert('请输入有效限价'); return; }
+  const sideStr = tradeSide === 'long' ? '开多' : '开空';
+  if (!confirm(`确认 ${sideStr} ${size} 张？`)) return;
+  const btn = $('btn-manual-order');
+  btn.disabled = true; btn.textContent = '提交中...';
+  try {
+    let url = `${BASE}/api/futures/order?ccy=${currentCoin}&side=${tradeSide==='long'?'buy':'sell'}&size=${size}&order_type=${oType}`;
+    if (price) url += `&price=${price}`;
+    const r = await fetch(url, { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) { alert('下单失败: ' + (d.detail || r.status)); return; }
+    alert(`${sideStr} 下单成功，订单号: ${d.order_id}`);
+    loadFuturesPosition(); loadOrders();
+  } catch(e) { alert('请求失败: ' + e); }
+  finally { btn.disabled = false; selectTradeSide(tradeSide); }
+}
+
+// ── Futures Fills ─────────────────────────────────────────────
+async function loadFuturesFills() {
+  if (!isSwap(currentCoin)) return;
+  const d = await api('/api/futures/fills');
+  const fills = d.fills || [];
+  const tbody = $('fills-tbody');
+  if (!fills.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-600">暂无成交记录</td></tr>';
+    return;
+  }
+  const { precision } = COIN_META[currentCoin];
+  tbody.innerHTML = fills.map(f => {
+    const ts   = f.ts ? new Date(f.ts).toLocaleString('zh-CN') : '—';
+    const side = f.side === 'buy' ? '买入' : '卖出';
+    const sc   = f.side === 'buy' ? 'order-buy' : 'order-sell';
+    const pnl  = f.pnl;
+    const pnlCls = pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-red-400' : 'text-slate-500';
+    return `<tr class="hover:bg-slate-800/30 transition-colors">
+      <td class="py-2 pr-4 text-slate-400 font-mono text-xs">${ts}</td>
+      <td class="py-2 pr-4"><span class="px-2 py-0.5 rounded text-xs font-semibold ${sc}">${side}</span></td>
+      <td class="py-2 pr-4 text-right font-mono text-slate-300">${f.fill_px > 0 ? f.fill_px.toFixed(precision) : '—'}</td>
+      <td class="py-2 pr-4 text-right font-mono text-slate-300">${f.fill_sz}</td>
+      <td class="py-2 pr-4 text-right font-mono ${pnlCls}">${pnl !== 0 ? (pnl>0?'+':'') + pnl.toFixed(4) : '—'}</td>
+      <td class="py-2 text-right font-mono text-slate-500">${f.fee !== 0 ? f.fee.toFixed(4) + ' ' + f.fee_ccy : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Open Orders ───────────────────────────────────────────────
+async function loadOrders() {
+  const d = await api('/api/orders', 'orders', 5000);
+  const tbody = $('orders-tbody');
+  const orders = d.orders || [];
+  $('orders-count').textContent = orders.length;
+  const swap = isSwap(currentCoin);
+  const cols = swap ? 6 : 7;
+  if (!orders.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center py-4 text-slate-600">暂无挂单</td></tr>`;
+    return;
+  }
+  const { precision } = COIN_META[currentCoin];
+  tbody.innerHTML = orders.map(o => {
+    const sideLabel = swap
+      ? (o.side === 'buy' ? '开多' : '开空')
+      : (o.side === 'buy' ? '买入' : '卖出');
+    const sc  = o.side === 'buy' ? 'order-buy' : 'order-sell';
+    const ts  = o.cTime ? new Date(parseInt(o.cTime)).toLocaleString('zh-CN') : '—';
+    const sellCol = swap ? '' : `<td class="py-2 pr-4 text-right font-mono">${
+      o.est_sell_price != null
+        ? `<span class="text-emerald-400">${parseFloat(o.est_sell_price).toFixed(precision)}</span>`
+        : '<span class="text-slate-600">—</span>'
+    }</td>`;
+    return `<tr class="hover:bg-slate-800/30 transition-colors">
+      <td class="py-2 pr-4 text-slate-500 font-mono">${o.ordId ? o.ordId.slice(-8) : '—'}</td>
+      <td class="py-2 pr-4"><span class="px-2 py-0.5 rounded text-xs font-semibold ${sc}">${sideLabel}</span></td>
+      <td class="py-2 pr-4 text-right font-mono text-slate-300">${o.px ? parseFloat(o.px).toFixed(precision) : '市价'}</td>
+      ${sellCol}
+      <td class="py-2 pr-4 text-right font-mono text-slate-300">${o.sz || '—'}${swap ? ' 张' : ''}</td>
+      <td class="py-2 pr-4 text-right text-slate-500">${ts}</td>
+      <td class="py-2 text-right">
+        <button onclick="cancelOrder('${o.ordId}')"
+          class="text-xs px-2 py-0.5 rounded bg-red-900/40 text-red-400 border border-red-800/40 hover:bg-red-800/60 transition-colors">撤单</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function cancelOrder(orderId) {
+  if (!confirm('确认撤销该挂单？')) return;
+  const r = await fetch(BASE + '/api/orders/' + orderId + '?ccy=' + currentCoin, { method: 'DELETE' });
+  const d = await r.json();
+  if (!r.ok) { alert('撤单失败: ' + (d.detail || r.status)); return; }
+  loadOrders();
+}
+
+async function cancelAllOrders() {
+  if (!confirm('确认撤销全部挂单？')) return;
+  const r = await fetch(BASE + '/api/orders?ccy=' + currentCoin, { method: 'DELETE' });
+  const d = await r.json();
+  if (!r.ok) { alert('撤销失败: ' + (d.detail || r.status)); return; }
+  loadOrders();
+}
+
+// ── Log Viewer ────────────────────────────────────────────────
+function classifyLog(line) {
+  if (/error|exception|traceback|critical/i.test(line)) return 'log-err';
+  if (/warn/i.test(line)) return 'log-warn';
+  if (/success|成功|profit|buy|sell|filled/i.test(line)) return 'log-ok';
+  return 'log-info';
+}
+
+async function loadLogs() {
+  const d = await api('/api/logs?lines=80');
+  const term = $('log-terminal');
+  if (!d.lines || !d.lines.length) {
+    term.innerHTML = '<span class="log-info">暂无日志</span>'; return;
+  }
+  term.innerHTML = d.lines.map(ln =>
+    `<div class="${classifyLog(ln)}">${ln.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`
+  ).join('');
+  if ($('log-autoscroll').checked) term.scrollTop = term.scrollHeight;
+}
+
+// ── Candles + Regime ──────────────────────────────────────────
+async function loadCandles() {
+  const d = await api('/api/candles', 'candles', 30000);
+  if (d.candles && d.candles.length) updateCandleChart(d.candles);
+  if (d.regime) setRegime(d.regime);
+  if (d.indicators) updateIndicators(d.indicators);
+}
+
+async function loadTrades() {
+  const d = await api('/api/trades', 'trades', 5000);
+  if (d.records) {
+    updateTradesTable(d.records);
+    initEquityChart(d.records);
+    initPnlBarChart(d.records);
+    updateStrategyStats(d.records);
+  }
+}
+
+// ── WebSocket (所有币种实时价格) ──────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onmessage = e => {
+    const all = JSON.parse(e.data);
+    for (const [ccy, d] of Object.entries(all)) {
+      const priceEl  = $('price-' + ccy);
+      const changeEl = $('change-' + ccy);
+      if (!priceEl) continue;
+      const { precision } = COIN_META[ccy] || { precision: 4 };
+      priceEl.textContent = d.price.toFixed(precision);
+      priceEl.classList.add('ticker-flash');
+      setTimeout(() => priceEl.classList.remove('ticker-flash'), 400);
+      changeEl.textContent = (d.change24h >= 0 ? '+' : '') + d.change24h.toFixed(3) + '%';
+      changeEl.className = 'font-mono text-xs ' + (d.change24h >= 0 ? 'text-emerald-400' : 'text-red-400');
+    }
+  };
+
+  ws.onclose = () => setTimeout(connectWS, 5000);
+  ws.onerror = () => ws.close();
+}
+
+// ── Refresh All ───────────────────────────────────────────────
+async function refreshAll() {
+  if (isSwap(currentCoin)) {
+    await Promise.all([
+      loadStatus(), loadStats(), loadCandles(), loadTrades(), loadOrders(), loadLogs(),
+      loadFuturesPosition(), loadFundingRate(), loadFuturesFills(), loadFuturesOverview(),
+    ]);
+  } else {
+    await Promise.all([loadStatus(), loadStats(), loadCandles(), loadTrades(),
+                       loadOrders(), loadLogs(), loadPosition()]);
+    loadFuturesOverview(); // 后台静默加载总览（不阻塞）
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────
+initCandleChart();
+refreshAll();
+connectWS();
+prefetchAll();  // 后台预热所有币种缓存
+loadOverview(); // 总览
+loadSystemStatus(); // 系统状态
+setInterval(() => {
+  loadStatus(); loadStats(); loadTrades(); loadOrders(); loadLogs();
+  if (isSwap(currentCoin)) {
+    loadFuturesPosition(); loadFundingRate(); loadFuturesFills();
+  } else {
+    loadPosition();
+  }
+}, 10_000);  // 5s → 10s（有缓存，没必要那么频繁）
+setInterval(() => { loadCandles(); prefetchAll(); loadOverview(); loadSystemStatus(); }, 30_000);
+</script>
+</body>
+</html>

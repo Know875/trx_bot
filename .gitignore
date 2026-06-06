@@ -1,0 +1,34 @@
+# Secrets — NEVER commit
+.env
+
+# Runtime
+__pycache__/
+*.pyc
+*.pyo
+.bot.lock
+.bot_heartbeat
+.lock_alert_rate
+.evolution_manual_lock
+*.tmp
+*.corrupted.*
+
+# Logs
+*.log
+
+# Trade data (personal)
+trade_records*.json
+backtest_data/
+
+# Runtime state（每台机器各自生成，提交会互相覆盖并泄露盈亏/策略数据）
+guard_state.json
+brain_state.json
+evolution_lock.json
+param_scores.json
+ai_tuning_state.json
+strategy_report.json
+strategy_guard_state.json
+
+# IDE
+.vscode/
+.idea/
+.claude/
