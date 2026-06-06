@@ -216,10 +216,11 @@ class FuturesTrendStrategy:
         try:
             self.client.close_futures_position()
             ct_val = self._get_ct_val()
+            fee = self.position * ct_val * (self.entry_price + price) * config.FUTURES_FEE_RATE
             if self.pos_side == "long":
-                pnl = self.position * ct_val * (price - self.entry_price)
+                pnl = self.position * ct_val * (price - self.entry_price) - fee
             else:
-                pnl = self.position * ct_val * (self.entry_price - price)
+                pnl = self.position * ct_val * (self.entry_price - price) - fee
             direction = "多" if self.pos_side == "long" else "空"
             logger.info(
                 f"合约平{direction}: "

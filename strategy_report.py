@@ -14,7 +14,7 @@
   sr.daily_summary()  # 每日报表
 """
 
-import json, os, logging
+import json, os, time, logging, threading
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from pathlib import Path
@@ -23,6 +23,18 @@ ROOT = Path(__file__).parent
 REPORT_FILE = str(ROOT / "strategy_report.json")
 
 logger = logging.getLogger("strategy_report")
+
+# 多个币种线程共用同一实例（main._reporter），串行化写盘
+_REPORT_LOCK = threading.RLock()
+
+
+def _synchronized(func):
+    import functools
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _REPORT_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
 
 # 各币种配比权重（按总本金百分比分配）
 WEIGHTS = {
@@ -43,14 +55,24 @@ class StrategyReporter:
 
     def _load(self):
         if os.path.exists(REPORT_FILE):
-            with open(REPORT_FILE) as f:
-                self.state = json.load(f)
-        else:
-            self.state = self._new_day()
+            try:
+                with open(REPORT_FILE) as f:
+                    self.state = json.load(f)
+                return
+            except Exception as e:
+                logger.warning(f"strategy_report.json 损坏，备份后重建: {e}")
+                try:
+                    os.rename(REPORT_FILE, f"{REPORT_FILE}.corrupted.{int(time.time())}")
+                except Exception:
+                    pass
+        self.state = self._new_day()
 
     def _save(self):
-        with open(REPORT_FILE, "w") as f:
+        # 原子写入，避免 web 并发读到半截 JSON
+        tmp = f"{REPORT_FILE}.tmp"
+        with open(tmp, "w") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False, default=str)
+        os.replace(tmp, REPORT_FILE)
 
     def _new_day(self) -> dict:
         return {}
@@ -82,6 +104,7 @@ class StrategyReporter:
 
     # ═══════════════════════════════════════════════════════
 
+    @_synchronized
     def record(self, coin: str, strategy: str, pnl: float, fee: float = 0, gross_pnl: float = None):
         """记录一笔交易的贡献"""
         key = self._ensure_strategy(coin, strategy)

@@ -15,7 +15,7 @@
   result = sg.check(coin, strategy)  # 每次策略决策前
 """
 
-import json, os, logging
+import json, os, time, logging, threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -23,6 +23,18 @@ ROOT = Path(__file__).parent
 STATE_FILE = str(ROOT / "strategy_guard_state.json")
 
 logger = logging.getLogger("strategy_guard")
+
+# 多个币种线程 + web 请求共用同一份 state，串行化读改写
+_SG_LOCK = threading.RLock()
+
+
+def _synchronized(func):
+    import functools
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with _SG_LOCK:
+            return func(*args, **kwargs)
+    return wrapper
 
 # 评分阈值
 SCORE_PAUSE_24H     = 40   # <40 → 暂停24h
@@ -55,14 +67,24 @@ class StrategyGuard:
 
     def _load(self):
         if os.path.exists(STATE_FILE):
-            with open(STATE_FILE) as f:
-                self.state = json.load(f)
-        else:
-            self.state = self._new_state()
+            try:
+                with open(STATE_FILE) as f:
+                    self.state = json.load(f)
+                return
+            except Exception as e:
+                logger.warning(f"strategy_guard_state.json 损坏，备份后重建: {e}")
+                try:
+                    os.rename(STATE_FILE, f"{STATE_FILE}.corrupted.{int(time.time())}")
+                except Exception:
+                    pass
+        self.state = self._new_state()
 
     def _save(self):
-        with open(STATE_FILE, "w") as f:
+        # 原子写入，避免 web 并发读到半截 JSON
+        tmp = f"{STATE_FILE}.tmp"
+        with open(tmp, "w") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False, default=str)
+        os.replace(tmp, STATE_FILE)
 
     def _new_state(self):
         return {
@@ -80,6 +102,7 @@ class StrategyGuard:
     def _key(self, coin: str, strategy: str) -> str:
         return f"{coin}:{strategy}"
 
+    @_synchronized
     def update_score(self, coin: str, strategy: str, score: int):
         """由 strategy_report 每日调用，更新评分"""
         today = str(datetime.now(timezone.utc).date())
@@ -107,6 +130,7 @@ class StrategyGuard:
     # 核心检查逻辑
     # ═══════════════════════════════════════════════════════
 
+    @_synchronized
     def check(self, coin: str, strategy: str) -> dict:
         """
         每次策略决策前调用。
@@ -210,6 +234,7 @@ class StrategyGuard:
     # 管理方法
     # ═══════════════════════════════════════════════════════
 
+    @_synchronized
     def manual_enable(self, coin: str, strategy: str):
         """人工恢复禁用策略"""
         key = self._key(coin, strategy)
@@ -225,6 +250,7 @@ class StrategyGuard:
         self._save()
         logger.info(f"✅ 人工恢复 {key}")
 
+    @_synchronized
     def manual_disable(self, coin: str, strategy: str, reason: str = "人工禁用"):
         """强制禁用策略"""
         key = self._key(coin, strategy)

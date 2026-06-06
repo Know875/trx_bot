@@ -781,8 +781,8 @@ async def get_system_status():
     # Account guard
     try:
         from account_guard import Guard
-        _total = sum(c.get("initial_capital", 0) for c in config.COIN_CONFIG.values())
-        g = Guard(total_capital=_total)
+        # 与实盘 guard 统一口径：用 config.TOTAL_CAPITAL（支持 .env 的 TOTAL_CAPITAL 覆盖）
+        g = Guard()
         status = g.status_report()
         result["account_guard"] = {
             "status": status.get("status", "unknown"),

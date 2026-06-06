@@ -160,7 +160,8 @@ class TrendStrategy:
             return 0.0
         try:
             self.client.place_order("sell", price, self.position, order_type="market")
-            pnl = self.position * (price - self.entry_price)
+            fee = self.position * (self.entry_price + price) * config.SPOT_FEE_RATE
+            pnl = self.position * (price - self.entry_price) - fee
             logger.info(f"平仓: {self.position} {self.client.symbol.split('-')[0]} @ {price}，盈亏: {pnl:.4f} USDT")
             emoji = "💰" if pnl >= 0 else "🔴"
             notify.send_tg(

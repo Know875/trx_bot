@@ -374,6 +374,7 @@ def get_macro_adjustment(macro_result: dict = None) -> dict:
     if not macro_result:
         return {
             "macro_risk": 0.5,
+            "position_multiplier": 1.0,
             "grid_width_mult": 1.0,
             "tp_mult": 1.0,
             "max_positions_mult": 1.0,
