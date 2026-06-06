@@ -100,10 +100,56 @@ def _load_existing_sweep() -> dict:
     return dict(existing)
 
 
+def _optuna_findings(coin, current_params, ind):
+    """用 Optuna 联合优化 width×levels，产出与离散扫参同构的 findings。
+    返回 None 表示 Optuna 不可用（调用方回退离散扫参）；返回 [] 表示无显著提升。"""
+    try:
+        from optimize import optimize_grid, current_pnl
+    except ImportError:
+        return None
+    res = optimize_grid(coin, ind=ind)
+    if res is None:
+        return None
+    if res.get("method") != "optuna":
+        # optimize 内部已回退到离散扫参 → 让 brain 走自己的离散逻辑，保持单一来源
+        return None
+
+    best = res["best_params"]
+    best_w, best_lv = best.get("grid_width"), best.get("grid_levels")
+    if best_w is None or best_lv is None:
+        return []
+
+    cur_w = current_params.get("grid_range_pct")
+    cur_lv = current_params.get("grid_count")
+    cur_pnl = current_pnl(coin, cur_w or best_w, cur_lv or best_lv, ind=ind)
+    best_pnl = res.get("best_value", cur_pnl)
+    improvement = best_pnl - cur_pnl
+    if improvement <= 0.3:   # 与离散扫参一致的提升门槛
+        return []
+
+    findings = []
+    if cur_w is not None and abs(round(best_w, 3) - cur_w) > 1e-4:
+        findings.append({
+            "coin": coin, "param": "grid_range_pct",
+            "current": cur_w, "candidate": round(best_w, 3),
+            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
+            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
+        })
+    if cur_lv is not None and int(best_lv) != int(cur_lv):
+        findings.append({
+            "coin": coin, "param": "grid_count",
+            "current": cur_lv, "candidate": int(best_lv),
+            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
+            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
+        })
+    return findings
+
+
 def explore_parameter_space(dry_run=False):
     """
     扫描所有币种的参数空间，找出回测表现好但未测试过的组合。
     使用细粒度采样：在每个已知最优值附近加密扫描。
+    Optuna 可用时优先用贝叶斯联合优化，否则回退离散扫参。
     """
     from backtesting.engine import load_from_cache, calc_indicators
     from backtesting.grid import simulate_grid
@@ -122,6 +168,16 @@ def explore_parameter_space(dry_run=False):
 
         ind = calc_indicators(df)
         current_params = _get_coin_params_simple(coin)
+
+        # ── 贝叶斯优化（Optuna）联合优化 width×levels，替代离散扫参 ──
+        opt_findings = _optuna_findings(coin, current_params, ind)
+        if opt_findings is not None:
+            findings.extend(opt_findings)
+            for f in opt_findings:
+                logger.info(f"  🔍(optuna) {coin}.{f['param']}: {f['current']}→{f['candidate']} "
+                            f"PnL {f['current_pnl']:+.2f}%→{f['candidate_pnl']:+.2f}% (+{f['improvement']:+.2f}%)")
+            time.sleep(0.05)
+            continue  # Optuna 已覆盖网格参数，跳过本币的离散扫参
 
         for param, (lo, hi, step) in params.items():
             key = f"{coin}.{param}"

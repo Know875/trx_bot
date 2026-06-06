@@ -196,68 +196,51 @@ def _bootstrap_wisdom(state: dict):
 # ═══════════════════════════════════════════════════════════
 
 def _sweep_grid_for_prompt() -> str:
-    """对所有币种跑网格扫参，返回 AI prompt 用表格。~7s"""
+    """对所有币种跑网格参数优化（Optuna 贝叶斯，缺 optuna 自动回退离散扫参），
+    返回 AI prompt 用的 Top 排名表格。"""
     try:
         from backtesting.engine import load_from_cache, calc_indicators
-        from backtesting.grid import sweep_grid_params
+        from optimize import optimize_grid, current_pnl
     except ImportError:
-        return "（回测模块不可用）"
+        return "（优化模块不可用）"
 
     coins_sweep = ["TRX", "ETH", "SOL"]
     spot_config = {c: _get_coin_params(c) for c in coins_sweep}
     swap_config = {f"{c}_SWAP": _get_coin_params(f"{c}_SWAP") for c in coins_sweep}
     all_configs = {**spot_config, **swap_config}
 
-    lines = ["## 📐 30d 网格扫参结果（硬数据，不是猜测）"]
-    lines.append("  ★ = 当前配置所在排名  |  格式: w=宽度 lv=层数 → PnL% 胜率%")
+    lines = ["## 📐 网格参数优化排名（硬数据，不是猜测）"]
+    lines.append("  格式: w=宽度 lv=层数 → PnL% 胜率%")
 
     for coin in coins_sweep:
-        base = coin
-        df = load_from_cache(base, "1h", 180)
+        df = load_from_cache(coin, "1h", 180)
         if df is None or len(df) < 200:
             lines.append(f"\n  ⚠️ {coin}: 无足够回测数据")
             continue
 
         ind = calc_indicators(df)
-        sweep = sweep_grid_params(ind, coin)
-        if not sweep:
+        res = optimize_grid(coin, ind=ind)
+        if not res or not res.get("top"):
             continue
 
-        cur_w = all_configs.get(coin, {}).get("grid_range_pct", "?")
-        cur_lv = all_configs.get(coin, {}).get("grid_count", "?")
-        cur_entries = all_configs.get(coin, {}).get("max_grid_entries", None)
+        cur_w = all_configs.get(coin, {}).get("grid_range_pct")
+        cur_lv = all_configs.get(coin, {}).get("grid_count")
+        cur_str = f"当前 w={cur_w} lv={cur_lv}"
+        if isinstance(cur_w, (int, float)) and isinstance(cur_lv, (int, float)):
+            cpnl = current_pnl(coin, cur_w, cur_lv, ind=ind)
+            cur_str += f" → PnL={cpnl:+.2f}%"
+        lines.append(f"\n  【{coin}】{cur_str}  (优化={res['method']}, {res['n_trials']}次)")
+        for i, t in enumerate(res["top"], 1):
+            lines.append(f"    #{i}: w={t['grid_width']:.3f} lv={t['grid_levels']} "
+                         f"→ PnL={t['pnl_pct']:+.2f}% 胜率={t['win_rate']:.0f}%")
 
-        # 标注现货
-        lines.append(f"\n  【{coin}】当前 w={cur_w} lv={cur_lv}")
-        # 找当前配置在排名中的位置
-        cur_pos = None
-        for i, r in enumerate(sweep):
-            if abs(r["grid_width"] - float(cur_w) if isinstance(cur_w, (int,float)) else 999) < 0.005 and r["grid_levels"] == int(cur_lv) if isinstance(cur_lv, (int,float)) else False:
-                cur_pos = i + 1
-                break
-        if cur_pos:
-            lines.append(f"    当前排名: #{cur_pos}/{len(sweep)}")
-        # Top 5
-        for i, r in enumerate(sweep[:5]):
-            star = " ★当前" if (abs(r["grid_width"] - float(cur_w) if isinstance(cur_w, (int,float)) else 999) < 0.005 and r["grid_levels"] == int(cur_lv) if isinstance(cur_lv, (int,float)) else False) else ""
-            lines.append(f"    #{i+1}: w={r['grid_width']:.2f} lv={r['grid_levels']} → PnL={r['pnl_pct']:+.2f}% 胜率={r['win_rate']:.0f}%{star}")
-
-        # 合约币种（同标的，但展示独立的 entries 参数）
-        for swap_coin in [f"{coin}_SWAP"]:
-            swap_w = all_configs.get(swap_coin, {}).get("grid_range_pct", cur_w)
-            swap_lv = all_configs.get(swap_coin, {}).get("grid_count", cur_lv)
-            swap_entries = all_configs.get(swap_coin, {}).get("max_grid_entries", None)
-            # 合约网格参数和现货共用扫参结果（标的相同），但展示独立当前配置
-            if swap_coin in all_configs:
-                lines.append(f"  【{swap_coin}】当前 w={swap_w} lv={swap_lv}, max_entries={swap_entries}")
-                # 找当前
-                sw_pos = None
-                for i, r in enumerate(sweep):
-                    if abs(r["grid_width"] - float(swap_w) if isinstance(swap_w, (int,float)) else 999) < 0.005 and r["grid_levels"] == int(swap_lv) if isinstance(swap_lv, (int,float)) else False:
-                        sw_pos = i + 1
-                        break
-                if sw_pos:
-                    lines.append(f"    排名: #{sw_pos}/{len(sweep)}")
+        # 合约同标的：展示其独立当前配置，参考上方排名
+        swap_coin = f"{coin}_SWAP"
+        sw = all_configs.get(swap_coin, {}).get("grid_range_pct")
+        sl = all_configs.get(swap_coin, {}).get("grid_count")
+        se = all_configs.get(swap_coin, {}).get("max_grid_entries")
+        if sw is not None:
+            lines.append(f"  【{swap_coin}】当前 w={sw} lv={sl} max_entries={se}（与 {coin} 同标的，参考上方排名）")
 
     return "\n".join(lines)
 
