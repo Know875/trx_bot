@@ -781,7 +781,8 @@ async def get_system_status():
     # Account guard
     try:
         from account_guard import Guard
-        g = Guard()
+        _total = sum(c.get("initial_capital", 0) for c in config.COIN_CONFIG.values())
+        g = Guard(total_capital=_total)
         status = g.status_report()
         result["account_guard"] = {
             "status": status.get("status", "unknown"),

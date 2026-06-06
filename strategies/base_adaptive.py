@@ -61,6 +61,9 @@ class BaseAdaptiveStrategy:
         self._tp1_done    = False
         self._stop_price  = 0.0
         self._tp1_price   = 0.0
+
+        # 网格补单失败计数（避免刷屏）
+        self._grid_fail = {"sell": 0, "buy": 0}
         self._tp2_price   = 0.0
         self._best_price  = 0.0
         self._cooldown    = 0
@@ -357,8 +360,14 @@ class BaseAdaptiveStrategy:
                         self._sell_orders[sell_price] = {"order_id": oid, "size": filled_size, "buy_cost": filled_price}
                         del self._buy_orders[price]
                         self._log_grid_fill("买入", filled_size, filled_price)
+                        self._grid_fail["sell"] = 0
                     except Exception as e:
-                        logger.error(f"[网格] 补挂卖单失败: {e}")
+                        self._grid_fail["sell"] += 1
+                        cnt = self._grid_fail["sell"]
+                        if cnt == 1 or cnt % 30 == 0:
+                            logger.warning(f"[网格] 补挂卖单连续失败 {cnt} 次: {e}")
+                        else:
+                            logger.debug(f"[网格] 补挂卖单失败 ({cnt}): {e}")
                 else:
                     del self._buy_orders[price]
             else:
@@ -409,8 +418,14 @@ class BaseAdaptiveStrategy:
                     oid = self._place_order("buy", buy_price, size)
                     self._buy_orders[buy_price] = {"order_id": oid, "size": size}
                     logger.info(f"[网格] 卖单成交→补挂买单 @ {buy_price:.6f}")
+                    self._grid_fail["buy"] = 0
                 except Exception as e:
-                    logger.error(f"[网格] 补挂买单失败: {e}")
+                    self._grid_fail["buy"] += 1
+                    cnt = self._grid_fail["buy"]
+                    if cnt == 1 or cnt % 30 == 0:
+                        logger.warning(f"[网格] 补挂买单连续失败 {cnt} 次: {e}")
+                    else:
+                        logger.debug(f"[网格] 补挂买单失败 ({cnt}): {e}")
 
     def _on_grid_sell_fill(self, price, size):
         idx = self._grid_prices.index(price) if price in self._grid_prices else -1
@@ -421,8 +436,14 @@ class BaseAdaptiveStrategy:
                     oid = self._place_order("buy", buy_price, size)
                     self._buy_orders[buy_price] = {"order_id": oid, "size": size}
                     logger.info(f"[网格] 补挂买单 @ {buy_price:.6f}")
+                    self._grid_fail["buy"] = 0
                 except Exception as e:
-                    logger.error(f"[网格] 补挂买单失败: {e}")
+                    self._grid_fail["buy"] += 1
+                    cnt = self._grid_fail["buy"]
+                    if cnt == 1 or cnt % 30 == 0:
+                        logger.warning(f"[网格] 补挂买单连续失败 {cnt} 次: {e}")
+                    else:
+                        logger.debug(f"[网格] 补挂买单失败 ({cnt}): {e}")
 
     def _check_grid_to_trend(self, current_price, ind):
         """成交量爆发 / 趋势切换检测 → 返回 (pnl, is_switched)"""

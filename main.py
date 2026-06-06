@@ -45,8 +45,9 @@ CHECK_INTERVAL  = 60    # 每 60 秒执行策略
 REGIME_INTERVAL = 900   # 每 15 分钟重新识别行情
 SWITCH_COOLDOWN = 1800  # 策略切换冷却 30 分钟（避免频繁切换→反复市价平仓）
 
-# 全局防护（本金口径统一来自 config.TOTAL_CAPITAL）
-_guard = Guard()
+# 全局防护（本金口径统一来自 config.COIN_CONFIG 合计）
+_total_capital = sum(c.get("initial_capital", 0) for c in config.COIN_CONFIG.values())
+_guard = Guard(total_capital=_total_capital)
 _reporter = StrategyReporter()
 _sguard = StrategyGuard()
 TREND_REENTRY_COOLDOWN = 900     # 趋势止损后至少等 15 分钟才能重新入场
