@@ -84,6 +84,27 @@ def _floating_pnl(ccy: str, client, is_futures: bool, price: float = 0.0) -> flo
         return 0.0
 
 
+def _apply_ml_regime(rule_regime, df, ccy, logger):
+    """ML 行情分类器覆盖层：高置信时用 ML 结果，否则回退规则。
+    缺模型/未装 sklearn/低置信/任何异常 → 原样返回规则结果，绝不中断实盘。"""
+    if not getattr(config, "USE_ML_REGIME", False):
+        return rule_regime
+    try:
+        import ml_regime
+        pred = ml_regime.predict(df, ccy)
+    except Exception:
+        return rule_regime
+    if not pred:
+        return rule_regime
+    ml_reg, conf = pred
+    if conf < getattr(config, "ML_REGIME_CONFIDENCE", 0.70):
+        return rule_regime
+    if ml_reg != rule_regime:
+        logger.info(f"🤖 ML 覆盖行情: {rule_regime} → {ml_reg} (置信度={conf:.0%})")
+        return ml_reg
+    return rule_regime
+
+
 def _strat_gate(ccy: str, sname: str):
     """返回某具体策略的 (是否允许开仓, 仓位乘数)。
     被 StrategyGuard 暂停/禁用 → (False, 0)；试运行/减半 → (True, <1)。
@@ -251,6 +272,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 raw = client.get_candles()
                 df  = parse_candles(raw)
                 new_regime, indicators = detect_regime(df, symbol=ccy)
+                new_regime = _apply_ml_regime(new_regime, df, ccy, logger)
                 ticker  = client.get_ticker()
                 price   = float(ticker["last"])
                 balance = client.get_balance("USDT")
@@ -637,6 +659,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 raw        = client.get_candles()
                 df         = parse_candles(raw)
                 new_regime, indicators = detect_regime(df, symbol=ccy)
+                new_regime = _apply_ml_regime(new_regime, df, ccy, logger)
                 ticker     = client.get_ticker()
                 price      = float(ticker["last"])
                 balance    = client.get_balance("USDT")

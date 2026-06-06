@@ -29,6 +29,12 @@ TG_CHAT_ID   = _env("TG_CHAT_ID")
 DEEPSEEK_API_KEY = _env("DEEPSEEK_API_KEY")
 AI_CONFIDENCE_THRESHOLD = 0.75
 
+# ── ML 行情分类器（增强 regime 判定）─────────────────────────
+# 缺模型 / 未装 sklearn / 置信度不足时自动回退规则引擎，不影响实盘。
+# 关闭：环境变量 USE_ML_REGIME=0。模型训练：python ml_regime.py train all
+USE_ML_REGIME        = _env("USE_ML_REGIME", "1") == "1"
+ML_REGIME_CONFIDENCE = float(_env("ML_REGIME_CONFIDENCE", "0.70"))  # 覆盖规则所需最低置信度
+
 # ── OKX API ─────────────────────────────────────────────────
 API_KEY    = _env("OKX_API_KEY")
 SECRET_KEY = _env("OKX_SECRET_KEY")

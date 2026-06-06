@@ -104,6 +104,35 @@ class OKXClient:
             raise RuntimeError(f"get_candles error: {result['msg']}")
         return result["data"]
 
+    def get_history_candles(self, bar=None, total=2000, symbol=None):
+        """分页拉取历史 K 线（用于 ML 训练），按时间升序返回原始行。
+        OKX 历史接口每页最多 100 根，向更早方向翻页。"""
+        bar = bar or config.CANDLE_BAR
+        symbol = symbol or self.symbol
+        out = []
+        after = None
+        while len(out) < total:
+            params = dict(instId=symbol, bar=bar, limit="100")
+            if after:
+                params["after"] = after
+            try:
+                result = self.market.get_history_candlesticks(**params)
+            except Exception as e:
+                logger.warning(f"get_history_candles 翻页失败: {e}")
+                break
+            if result.get("code") != "0":
+                logger.warning(f"get_history_candles error: {result.get('msg')}")
+                break
+            data = result.get("data", [])
+            if not data:
+                break
+            out.extend(data)
+            after = data[-1][0]   # 本页最早一根的 ts，下一页取更早的
+            if len(data) < 100:
+                break
+            time.sleep(0.12)      # 礼貌限频
+        return out
+
     @_retry()
     def get_ticker(self, symbol=None):
         symbol = symbol or self.symbol

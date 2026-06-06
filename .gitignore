@@ -17,7 +17,11 @@ __pycache__/
 
 # Trade data (personal)
 trade_records*.json
-backtest_data/
+# 回测/训练数据：保留 15m CSV（ML 训练用，公开行情非隐私），忽略大体积 1h JSON
+backtest_data/*.json
+
+# ML 模型（每台机器各自训练）
+models/
 
 # Runtime state（每台机器各自生成，提交会互相覆盖并泄露盈亏/策略数据）
 guard_state.json
