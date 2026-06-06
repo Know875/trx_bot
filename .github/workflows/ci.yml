@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, github]  # 三分支都跑
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt 2>/dev/null || true
+          pip install pytest pytest-cov httpx requests 2>/dev/null || true
+
+      - name: Syntax check (py_compile)
+        run: |
+          python -m py_compile config.py
+          python -m py_compile evolution_lock.py
+          python -m py_compile account_guard.py
+          python -m py_compile ai_advisor.py
+          python -m py_compile strategy_guard.py
+          python -m py_compile strategy_report.py
+          python -m py_compile brain.py
+          python -m py_compile param_score.py
+          python -m py_compile state_db.py
+          python -m py_compile tracker.py
+          python -m py_compile okx_client.py
+          python -m py_compile market_analyzer.py
+          python -m py_compile notify.py
+          python -m py_compile macro.py
+          python -m py_compile main.py
+          python -m py_compile web/app.py
+          # strategies
+          for f in strategies/*.py; do python -m py_compile "$f"; done
+          # backtesting
+          for f in backtesting/*.py; do python -m py_compile "$f"; done
+          # new modules
+          python -m py_compile edge_research.py 2>/dev/null || true
+          python -m py_compile paper_eval.py 2>/dev/null || true
+
+      - name: Run pytest
+        run: |
+          python -m pytest tests/ -v --tb=short --timeout=30 2>/dev/null || \
+          python -m pytest tests/ -v --tb=short
+
+      - name: Verify imports
+        run: |
+          cd $(dirname $(find . -name "config.py" | head -1))
+          python -c "import config; print(f'Coins: {list(config.COIN_CONFIG.keys())}')"
+          python -c "from account_guard import Guard; g=Guard(); print(f'Guard OK: {g.status_report()[\"status\"]}')"
+          python -c "from strategy_guard import StrategyGuard; print(f'StrategyGuard OK')"
+          python -c "from evolution_lock import can_evolve; ok,_=can_evolve(); print(f'Evolution Lock: {\"OK\" if ok else \"LOCKED\"}')"
+          python -c "from ai_advisor import safe_ai_advice; print(f'AI Safety OK')"
+          python -c "from state_db import GuardStateDB; print(f'StateDB OK')"
+          python -c "from backtesting.grid import simulate_grid; from backtesting.trend import simulate_trend; print(f'Backtesting OK')"
