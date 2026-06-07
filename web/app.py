@@ -753,7 +753,11 @@ async def _fetch_one_ticker(ccy: str, client: OKXClient):
 
 @app.get("/api/system/status")
 async def get_system_status():
-    """统一系统状态：账户防护 + 进化锁 + 策略守卫 + 审计 + 心跳"""
+    """统一系统状态：账户防护 + 进化锁 + 策略守卫 + 审计 + 心跳。
+    带 20s TTL 缓存：避免多标签页/频繁轮询重复触发 is_extreme_market 的外部 OKX 调用。"""
+    cached, hit = _cache_get("system_status")
+    if hit:
+        return cached
     result = {
         "bot_running": False,
         "bot_process": "stopped",
@@ -863,6 +867,7 @@ async def get_system_status():
     except Exception:
         pass
 
+    _cache_set("system_status", result, ttl=20)
     return result
 
 
