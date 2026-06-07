@@ -70,6 +70,8 @@ def read_strategies() -> list:
     g = Guard()
     guard_rpt = g.status_report()
     per_coin = guard_rpt.get("per_coin", {})
+    # 用 Guard SQLite 后端获取冷却状态，不再读旧的 JSON 文件
+    cooled_until_map = guard_rpt.get("coin_cooled_until", {})
     now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
     results = []
 
@@ -79,7 +81,7 @@ def read_strategies() -> list:
         pc = per_coin.get(coin, {})
         cons = pc.get("consecutive_losses", 0) or 0
 
-        cooled_until = safe_iso_to_dt(guard_state.get("coin_cooled_until", {}).get(coin))
+        cooled_until = safe_iso_to_dt(cooled_until_map.get(coin))
         coin_cooled = cooled_until is not None and now_naive < cooled_until
 
         results.append({
