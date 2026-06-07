@@ -12,6 +12,7 @@ import logging
 
 import config
 import notify
+import volatility_adapter
 
 logger = logging.getLogger("base_adaptive")
 
@@ -238,6 +239,10 @@ class BaseAdaptiveStrategy:
 
         grid_range = config.TRX_NARROW_GRID_RANGE_PCT if self._is_dead_grid else config.TRX_GRID_RANGE_PCT
         gc = grid_count()
+        
+        # 波动率自适应：根据当前 ATR 调网格宽度和档位
+        grid_range, gc, _volr = volatility_adapter.get_adapted_grid_params(
+            self.coin, grid_range, gc, indicators)
         capital = self.capital * self._grid_position_pct()
 
         lower = mid * (1 - grid_range / 2)

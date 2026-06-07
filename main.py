@@ -27,6 +27,7 @@ from strategy_guard import StrategyGuard
 from notify import send_tg
 from ai_advisor import get_ai_regime_hint
 from macro import MacroIntelligence, get_macro_adjustment
+import volatility_adapter
 
 _macro = MacroIntelligence()
 GLOBAL_MACRO = {"risk_score": 0.5, "position_multiplier": 1.0}
@@ -445,6 +446,10 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                 grid_count = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
                                 grid_range = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
 
+                                # 波动率自适应：ATR 变化时动态调网格
+                                grid_range, grid_count, _ = volatility_adapter.get_adapted_grid_params(
+                                    coin_base, grid_range, grid_count, indicators)
+
                                 # 宏观风险调整：高风险→网格更宽档更少，低风险→正常
                                 m_adj = get_macro_adjustment(GLOBAL_MACRO)
                                 # 保护模式加宽网格
@@ -861,6 +866,10 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                     grid_count = getattr(config, f"{ccy[:-5]}_GRID_COUNT", config.GRID_COUNT)
                                     grid_range = getattr(config, f"{ccy[:-5]}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
                                     grid_pos   = getattr(config, f"{ccy[:-5]}_GRID_POSITION_PCT", 0.5)
+
+                                    # 波动率自适应
+                                    grid_range, grid_count, _ = volatility_adapter.get_adapted_grid_params(
+                                        ccy[:-5], grid_range, grid_count, indicators)
 
                                     # 宏观风险调整
                                     m_adj = get_macro_adjustment(GLOBAL_MACRO)
