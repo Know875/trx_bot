@@ -1504,7 +1504,7 @@ async function loadOrders() {
 
 async function cancelOrder(orderId) {
   if (!confirm('确认撤销该挂单？')) return;
-  const r = await fetch(BASE + '/api/orders/' + orderId + '?ccy=' + currentCoin, { method: 'DELETE' });
+  const r = await fetch(BASE + '/api/orders/' + orderId + '?ccy=' + currentCoin, { method: 'DELETE', headers: _authHeaders() });
   const d = await r.json();
   if (!r.ok) { alert('撤单失败: ' + (d.detail || r.status)); return; }
   loadOrders();
@@ -1512,7 +1512,7 @@ async function cancelOrder(orderId) {
 
 async function cancelAllOrders() {
   if (!confirm('确认撤销全部挂单？')) return;
-  const r = await fetch(BASE + '/api/orders?ccy=' + currentCoin, { method: 'DELETE' });
+  const r = await fetch(BASE + '/api/orders?ccy=' + currentCoin, { method: 'DELETE', headers: _authHeaders() });
   const d = await r.json();
   if (!r.ok) { alert('撤销失败: ' + (d.detail || r.status)); return; }
   loadOrders();

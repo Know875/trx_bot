@@ -45,7 +45,7 @@ class FuturesTrendStrategy:
 
     def _calc_contracts(self, price):
         ct_val   = self._get_ct_val()
-        usdt     = self.capital * config.TREND_POSITION_PCT * config.get_leverage(self.ccy + "_SWAP")
+        usdt     = self.capital * config.TREND_POSITION_PCT * config.get_leverage(self.ccy)
         contracts = usdt / (price * ct_val)
         return max(1, math.floor(contracts))
 
