@@ -956,6 +956,20 @@ async def get_measure():
     }
 
 
+@app.get("/api/carry/positions")
+async def get_carry_positions():
+    """查看当前 carry 持仓"""
+    import json
+    from pathlib import Path
+    pos_file = Path(__file__).parent.parent / ".carry_positions.json"
+    if pos_file.exists():
+        try:
+            return json.loads(pos_file.read_text())
+        except Exception:
+            pass
+    return {}
+
+
 @app.get("/api/carry")
 async def get_carry():
     """资金费率套利监控。后台计算 + 5min 缓存，接口秒回。"""
