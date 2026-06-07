@@ -134,13 +134,13 @@ FUTURES_GRID_MAX_FLOAT_LOSS = {
 }
 
 # ── 各币种网格参数（180天回测调优）────────────────────────────
-ETH_SPOT_GRID_RANGE_PCT = 0.16
+ETH_SPOT_GRID_RANGE_PCT = 0.162
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
 ETH_GRID_RANGE_PCT      = 0.12
 
-SOL_SPOT_GRID_RANGE_PCT = 0.04
+SOL_SPOT_GRID_RANGE_PCT = 0.046
 SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
@@ -226,3 +226,4 @@ SOL_FUTURES_MAX_GRID_ENTRIES = 3.0 # 合约网格最多同时持有 4 个买入�
 # ── 行情 ──────────────────────────────────────────────────────
 CANDLE_BAR   = "15m"
 CANDLE_LIMIT = 100
+

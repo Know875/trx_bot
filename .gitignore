@@ -14,6 +14,8 @@ __pycache__/
 
 # Logs
 *.log
+*.log.*
+ai_tuning_log.txt
 
 # Trade data (personal)
 trade_records*.json
@@ -42,3 +44,7 @@ bot_state.db-wal
 bot_state.db-shm
 *.migrated
 web/static/*.tar.gz
+
+# 看门狗 / 费率运行时缓存
+.watchdog_alerts.json
+.funding_cache.json
