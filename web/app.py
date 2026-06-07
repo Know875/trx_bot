@@ -85,6 +85,13 @@ async def auth_middleware(request: Request, call_next):
                 valid = True
         except Exception:
             pass
+    elif auth.startswith("Bearer "):
+        t = auth[7:].strip()
+        expire = _SESSION_TOKENS.get(t)
+        if expire and time.time() < expire:
+            valid = True
+        elif expire:
+            _SESSION_TOKENS.pop(t, None)
     elif token:
         expire = _SESSION_TOKENS.get(token)
         if expire and time.time() < expire:
