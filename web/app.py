@@ -232,7 +232,7 @@ async def get_stats(ccy: str = Query("TRX")):
     # ── 合约模式 ──────────────────────────────────────────────
     if cfg.get("mode") == "futures":
         balance = upl = contracts = avg_px = liq_px = margin = 0.0
-        lever   = config.FUTURES_LEVERAGE
+        lever   = config.FUTURES_DEFAULT_LEVERAGE
         pos_side = ""
         price    = 0.0
         dd       = 0.0
@@ -248,7 +248,7 @@ async def get_stats(ccy: str = Query("TRX")):
                 avg_px    = float(pos.get("avgPx") or 0)
                 liq_px    = float(pos.get("liqPx") or 0)
                 margin    = float(pos.get("margin") or 0)
-                lever     = int(float(pos.get("lever") or config.FUTURES_LEVERAGE))
+                lever     = int(float(pos.get("lever") or config.FUTURES_DEFAULT_LEVERAGE))
                 pos_side  = pos.get("posSide", "net")
                 # contracts=0 说明无实际仓位，OKX 可能短暂保留 upl 旧值，强制清零
                 upl       = float(pos.get("upl") or 0) if contracts != 0 else 0.0
@@ -504,7 +504,7 @@ async def get_futures_position(ccy: str = Query("TRX_SWAP")):
             result = {
                 "ccy": ccy, "contracts": 0, "pos_side": "", "avg_px": 0,
                 "price": price, "upl": 0, "liq_px": 0, "margin": 0,
-                "lever": config.FUTURES_LEVERAGE,
+                "lever": config.FUTURES_DEFAULT_LEVERAGE,
             }
         else:
             result = {
@@ -516,7 +516,7 @@ async def get_futures_position(ccy: str = Query("TRX_SWAP")):
                 "upl":       round(float(pos.get("upl") or 0), 4),
                 "liq_px":    round(float(pos.get("liqPx") or 0), 6),
                 "margin":    round(float(pos.get("margin") or 0), 4),
-                "lever":     int(float(pos.get("lever") or config.FUTURES_LEVERAGE)),
+                "lever":     int(float(pos.get("lever") or config.FUTURES_DEFAULT_LEVERAGE)),
             }
         _cache_set(key, result, ttl=8)
         return result
@@ -524,7 +524,7 @@ async def get_futures_position(ccy: str = Query("TRX_SWAP")):
         return {
             "error": str(e), "ccy": ccy, "contracts": 0, "pos_side": "",
             "avg_px": 0, "price": 0, "upl": 0, "liq_px": 0, "margin": 0,
-            "lever": config.FUTURES_LEVERAGE,
+            "lever": config.FUTURES_DEFAULT_LEVERAGE,
         }
 
 
@@ -653,7 +653,7 @@ async def get_futures_overview():
                 "pos_side":  pos.get("posSide", "") if pos else "",
                 "upl":       round(float(pos.get("upl", 0)), 4) if pos else 0,
                 "liq_px":    round(float(pos.get("liqPx", 0)), 6) if pos else 0,
-                "lever":     int(float(pos.get("lever", config.FUTURES_LEVERAGE))) if pos else config.FUTURES_LEVERAGE,
+                "lever":     int(float(pos.get("lever", config.FUTURES_DEFAULT_LEVERAGE))) if pos else config.FUTURES_DEFAULT_LEVERAGE,
             }
         except Exception:
             result[ccy] = {"price": 0, "contracts": 0, "pos_side": "", "upl": 0, "liq_px": 0, "lever": 0}
@@ -710,7 +710,7 @@ async def get_overview():
                         "pos_side":  pos.get("posSide", ""),
                         "upl":       round(float(pos.get("upl", 0)), 4),
                         "liq_px":    round(float(pos.get("liqPx", 0)), 6),
-                        "lever":     int(float(pos.get("lever", config.FUTURES_LEVERAGE))),
+                        "lever":     int(float(pos.get("lever", config.FUTURES_DEFAULT_LEVERAGE))),
                     }
             else:
                 coin_avail = client.get_available_balance(ccy)
@@ -854,8 +854,7 @@ async def get_system_status():
         from strategy_guard import StrategyGuard
         sg = StrategyGuard()
         for coin in config.COINS:
-            from strategy_guard import StrategyGuard as SG
-            strats = SG._get_coin_strategies(coin)
+            strats = StrategyGuard._get_coin_strategies(coin)
             if not strats:
                 continue
             coin_status = {}

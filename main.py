@@ -608,8 +608,6 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 consecutive_trend_losses = 0
                 tracker.reset_drawdown_reference()
                 logger.info(f"⏸️ {ccy} 进入冷却期（{SWITCH_COOLDOWN}s），等待回撤恢复后再重新评估行情")
-                # 重置 tracker 回撤基准（冷却后从当前权益重新开始）
-                tracker.reset_drawdown_reference()
                 # 等待冷却
                 wait_start = time.time()
                 while time.time() - wait_start < SWITCH_COOLDOWN and not stop_event.is_set():
@@ -648,7 +646,6 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
     client   = OKXClient(symbol=symbol, flag=coin_cfg.get("flag"), market_flag=coin_cfg.get("market_flag"))
     tracker  = Tracker(initial_capital, ccy=ccy)
-    should_stop = False
     consecutive_trend_losses = 0
     last_trend_loss_time     = 0
 
@@ -1055,9 +1052,6 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
         except Exception as e:
             logger.error(f"策略执行异常: {e}")
-
-        if should_stop:
-            break
 
         # ── tick 耗时监控 ────────────────────────────────
         _tick_dur = time.time() - _tick_start
