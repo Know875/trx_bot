@@ -60,9 +60,10 @@ class OrderNotFoundTracker:
 
     def check(self, order_id: str) -> bool:
         """返回 True 表示还可以继续查询，False 表示超过上限"""
-        # 防止长跑累积：超过 1000 个条目时清空（已完成的订单计数无用）
+        # 防止长跑累积：超过 1000 个条目时清理已完成的（只保留仍在查询中的）
         if len(self._counts) > 1000:
-            self._counts.clear()
+            self._counts = {k: v for k, v in self._counts.items()
+                           if v <= ORDER_NOT_FOUND_MAX_QUERIES}
         n = self._counts.get(order_id, 0) + 1
         self._counts[order_id] = n
         return n <= ORDER_NOT_FOUND_MAX_QUERIES
@@ -281,7 +282,7 @@ class OKXClient:
         details = result["data"][0]["details"]
         for item in details:
             if item["ccy"] == base_ccy:
-                return float(item["availBal"])
+                return float(item.get("cashBal", item["availBal"]))
         return 0.0
 
     @_retry()

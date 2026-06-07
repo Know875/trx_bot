@@ -33,6 +33,16 @@ def _get_conn() -> sqlite3.Connection:
     """获取当前线程的 SQLite 连接（线程安全）。"""
     tid = threading.get_ident()
     with _conn_lock:
+        # 定期清理已终止线程的连接（超过50个时触发）
+        if len(_connections) > 50:
+            alive = {t.ident for t in threading.enumerate() if t.ident}
+            dead = [t for t in _connections if t not in alive]
+            for t in dead:
+                try:
+                    _connections[t].close()
+                except Exception:
+                    pass
+                del _connections[t]
         if tid not in _connections:
             conn = sqlite3.connect(DB_PATH, timeout=10, check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL")
