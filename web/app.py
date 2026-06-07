@@ -2,8 +2,10 @@
 import sys, os, time, secrets
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import asyncio
+import asyncio, logging
 from pathlib import Path
+
+logger = logging.getLogger("dashboard")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +20,16 @@ from tracker import Tracker
 STATIC  = Path(__file__).parent / "static"
 BOT_DIR = Path(__file__).parent.parent
 
+# 临时DEBUG日志 — 排查前端fetch失败
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s [%(name)s] %(levelname)s %(message)s')
+logger.setLevel(logging.DEBUG)
+
 app = FastAPI(title="Multi-Coin Bot Dashboard")
 # 仅允许本地和同源请求，敏感接口需要认证
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8090", "http://127.0.0.1:8090"],
+    allow_origins_regex=r"https?://(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+):8090",
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
@@ -38,8 +45,7 @@ _SESSION_TOKENS: dict[str, float] = {}
 _WEAK_PASSWORDS = {"", "admin123", "password", "123456", "admin"}
 _AUTH_ENABLED = bool(_PASSWORD) and _PASSWORD not in _WEAK_PASSWORDS
 if not _AUTH_ENABLED:
-    import logging as _logging
-    _logging.getLogger("dashboard").error(
+    logger.error(
         "❌ DASHBOARD_PASSWORD 未设置或使用弱口令（admin123等），Dashboard 启动但所有操作需要认证，"
         "当前无有效密码，请在 .env 中设置 DASHBOARD_PASSWORD=你的强密码"
     )
@@ -56,6 +62,10 @@ async def auth_middleware(request: Request, call_next):
     """
     method = request.method.upper()
     path = request.url.path
+
+    # DEBUG: 记录 API 请求来源（排查前端 fetch 失败）
+    if path.startswith("/api/") and path != "/api/auth/login":
+        logger.debug(f"REQ {method} {path}?{request.url.query} origin={request.headers.get('origin','?')} agent={str(request.headers.get('user-agent','?'))[:60]}")
 
     # 静态资源、WebSocket、根路径跳过
     if path.startswith("/static") or path == "/ws" or path == "/":
