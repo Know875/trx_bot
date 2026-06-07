@@ -110,6 +110,12 @@ class Guard:
         self._db.set_json("coin_cooled_until", {})
         self._db.set_json("alerts", [])
 
+    def _add_alert(self, level: str, msg: str):
+        """追加告警并裁剪到最近 50 条，避免持续 warn/protect 时 alerts 无界膨胀。"""
+        alerts = self._db.get_json("alerts", [])
+        alerts.append({"time": datetime_str(), "level": level, "msg": msg})
+        self._db.set_json("alerts", alerts[-50:])
+
     # ═══════════════════════════════════════════════════════
     # 核心方法
     # ═══════════════════════════════════════════════════════
@@ -137,9 +143,7 @@ class Guard:
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_HALT:.0%}，强制停止所有开仓"
             result["restrictions"] = ["no_open", "close_only", "alert_critical"]
             self._db.set("status", "halt")
-            alerts = self._db.get_json("alerts", [])
-            alerts.append({"time": datetime_str(), "level": "critical", "msg": result["reason"]})
-            self._db.set_json("alerts", alerts)
+            self._add_alert("critical", result["reason"])
             return result
 
         # ── L2 保护模式 ──
@@ -149,9 +153,7 @@ class Guard:
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_PROTECT:.0%}，进入保护模式"
             result["restrictions"] = ["reduce_position", "widen_grid", "confirm_open"]
             self._db.set("status", "protect")
-            alerts = self._db.get_json("alerts", [])
-            alerts.append({"time": datetime_str(), "level": "warning", "msg": result["reason"]})
-            self._db.set_json("alerts", alerts)
+            self._add_alert("warning", result["reason"])
             return result
 
         # ── L1 预警 ──
@@ -161,9 +163,7 @@ class Guard:
             result["reason"] = f"日亏损 {abs(daily_pnl_pct):.1%} > {DAILY_LOSS_WARN:.0%}，暂停新增仓位"
             result["restrictions"] = ["no_new_positions"]
             self._db.set("status", "warn")
-            alerts = self._db.get_json("alerts", [])
-            alerts.append({"time": datetime_str(), "level": "info", "msg": result["reason"]})
-            self._db.set_json("alerts", alerts)
+            self._add_alert("info", result["reason"])
             return result
 
         self._db.set("status", "normal")

@@ -173,13 +173,22 @@ def test_guard_mult_warn():
 
 
 def test_guard_mult_protect():
-    """保护模式：仓位×0.40，可开仓但加宽网格"""
+    """保护模式：仓位×0.40，禁止新开仓（比 warn 更严，单调性）"""
     from main import _guard_mult
     mult, can_open, extra = _guard_mult({"status": "protect", "mode": "protect"})
     assert mult == 0.40
-    assert can_open is True
+    assert can_open is False
     # extra 包含网格加宽标记
     assert "widen_grid" in extra or any("widen" in str(x) for x in extra)
+
+
+def test_guard_mult_monotonic():
+    """严重度单调性：越亏越严，cap_mult 不可变大、can_open 不可放宽"""
+    from main import _guard_mult
+    mults = [_guard_mult({"mode": m})[0] for m in ("normal", "warn", "protect", "halt")]
+    opens = [_guard_mult({"mode": m})[1] for m in ("normal", "warn", "protect", "halt")]
+    assert mults == sorted(mults, reverse=True)       # 1.0 ≥ 0.65 ≥ 0.40 ≥ 0.0
+    assert opens == [True, False, False, False]        # 关了就不再开
 
 
 def test_guard_mult_halt():

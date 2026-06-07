@@ -108,16 +108,17 @@ def _apply_ml_regime(rule_regime, df, ccy, logger):
 def _guard_mult(guard_result: dict) -> tuple:
     """将 account_guard 的 warn/protect/halt 状态转为仓位系数和开仓限制。
     返回 (capital_mult, can_open_new, extra_restrictions)
-    - halt:      (0.0, False, ["close_only"])       → 主线已跳过
-    - protect:   (0.40, True,  ["reduce_position", "widen_grid"])
-    - warn:      (0.65, False, ["no_new_positions"])
+    单调性要求：越严重 → can_open 只能更严、cap_mult 只能更小。
     - normal:    (1.0,  True,  [])
+    - warn:      (0.65, False, ["no_new_positions"])              日亏2%   暂停新开
+    - protect:   (0.40, False, ["no_new_positions","reduce_position","widen_grid"])  日亏3.5% 更严，只管理存量
+    - halt:      (0.0,  False, ["close_only"])                    日亏5%   只许平仓（主线已跳过）
     """
     mode = guard_result.get("mode", "normal")
     if mode == "halt":
         return (0.0, False, ["close_only"])
     if mode == "protect":
-        return (0.40, True, ["reduce_position", "widen_grid"])
+        return (0.40, False, ["no_new_positions", "reduce_position", "widen_grid"])
     if mode == "warn":
         return (0.65, False, ["no_new_positions"])
     return (1.0, True, [])
