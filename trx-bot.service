@@ -1,0 +1,21 @@
+[Unit]
+Description=TRX Bot - Multi-Coin Trading Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/projects/trx_bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/projects/trx_bot/bot_main.log
+StandardError=append:/root/projects/trx_bot/bot_main.log
+
+# 安全限制
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

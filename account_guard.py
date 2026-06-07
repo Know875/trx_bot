@@ -80,12 +80,12 @@ PER_COIN_BUDGET_RATIO = 0.40  # 单币种日亏超总预算 40% → 暂停
 
 # 各币种日预算（USDT）
 COIN_DAILY_BUDGET = {
-    "TRX":      5,
-    "ETH":      15,
-    "SOL":      10,
-    "TRX_SWAP": 6,
-    "ETH_SWAP": 12,
-    "SOL_SWAP": 8,
+    "TRX":      10,
+    "ETH":      25,
+    "SOL":      25,
+    "TRX_SWAP": 10,
+    "ETH_SWAP": 20,
+    "SOL_SWAP": 12,
 }
 
 
@@ -218,30 +218,49 @@ class Guard:
         if cooled_until_str:
             cooled_until = _safe_parse_dt(cooled_until_str)
             if cooled_until and now < cooled_until:
-                remaining = (cooled_until - now).total_seconds() / 3600
-                result["allowed"] = False
-                result["reason"] = f"{coin} 冷却中，剩余 {remaining:.1f}h"
-                return result
+                # 如果该币种今天总PnL已回正，提前解除冷却
+                per_coin = self._db.get_json("per_coin", {})
+                pc = per_coin.get(coin, {})
+                if pc.get("total_pnl", 0) > 0:
+                    del coin_cooled[coin]
+                    self._db.set_json("coin_cooled_until", coin_cooled)
+                    logger.info(f"{coin} 冷却提前解除：日PnL已回正 ({pc['total_pnl']:+.2f})")
+                else:
+                    remaining = (cooled_until - now).total_seconds() / 3600
+                    result["allowed"] = False
+                    result["reason"] = f"{coin} 冷却中，剩余 {remaining:.1f}h"
+                    return result
 
-        # 检查连续亏损
+        # 检查连续亏损 — 但如果该币种今天总PnL为正，只在日志提示不暂停
         per_coin = self._db.get_json("per_coin", {})
         pc = per_coin.get(coin, {})
         cons = pc.get("consecutive_losses", 0)
         if cons >= CONSECUTIVE_LOSS_MAX:
-            cooled_until = now + timedelta(hours=CONSECUTIVE_COOLDOWN_H)
-            coin_cooled[coin] = cooled_until.isoformat()
-            self._db.set_json("coin_cooled_until", coin_cooled)
-            result["allowed"] = False
-            result["reason"] = f"{coin} 连续亏损 {cons} 笔，冷却 {CONSECUTIVE_COOLDOWN_H}h"
-            pc["cooled"] = True
-            per_coin[coin] = pc
-            self._db.set_json("per_coin", per_coin)
-            return result
+            total_pnl = pc.get("total_pnl", 0)
+            if total_pnl > 0:
+                # 总PnL为正，说明连续亏损只是回撤不是亏损 — 只提醒不暂停
+                logger.info(f"{coin} 连续亏损{cons}笔但日PnL={total_pnl:+.2f}为正，不触发冷却")
+            else:
+                cooled_until = now + timedelta(hours=CONSECUTIVE_COOLDOWN_H)
+                coin_cooled[coin] = cooled_until.isoformat()
+                self._db.set_json("coin_cooled_until", coin_cooled)
+                result["allowed"] = False
+                result["reason"] = f"{coin} 连续亏损 {cons} 笔（日PnL={total_pnl:+.2f}），冷却 {CONSECUTIVE_COOLDOWN_H}h"
+                pc["cooled"] = True
+                per_coin[coin] = pc
+                self._db.set_json("per_coin", per_coin)
+                return result
 
-        # 检查币种预算
+        # 检查币种预算 — 但如果全局日PnL为正，放宽阈值
         budget = COIN_DAILY_BUDGET.get(coin, 10)
         coin_loss = abs(pc.get("total_pnl", 0)) if pc.get("total_pnl", 0) < 0 else 0
         if coin_loss > budget * PER_COIN_BUDGET_RATIO:
+            daily_pnl = self._db.get_float("daily_pnl", 0)
+            if daily_pnl > 0:
+                # 全局盈利 → 放宽到预算的2倍（全局赚钱就不要卡死单币种）
+                if coin_loss <= budget * 2.0:
+                    logger.info(f"{coin} 日亏${coin_loss:.1f}（预算{budget}）但全局PnL={daily_pnl:+.2f}为正，放宽限制")
+                    return result
             result["allowed"] = False
             result["reason"] = f"{coin} 日亏 ${coin_loss:.1f} > 预算 {PER_COIN_BUDGET_RATIO:.0%}，暂停"
             return result

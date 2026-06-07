@@ -55,34 +55,34 @@ COIN_CONFIG = {
     # ── 现货 ──
     "TRX": {
         "symbol": "TRX-USDT", "mode": "spot",
-        "initial_capital": 3000.0, "size_decimals": 0, "min_order_size": 1,
+        "initial_capital": 5000.0, "size_decimals": 0, "min_order_size": 1,
     },
     "ETH": {
         "symbol": "ETH-USDT", "mode": "spot",
-        "initial_capital": 3000.0, "size_decimals": 4, "min_order_size": 0.001,
+        "initial_capital": 5000.0, "size_decimals": 4, "min_order_size": 0.001,
     },
     "SOL": {
         "symbol": "SOL-USDT", "mode": "spot",
-        "initial_capital": 4000.0, "size_decimals": 2, "min_order_size": 0.01,
+        "initial_capital": 6000.0, "size_decimals": 2, "min_order_size": 0.01,
     },
     # ── 合约（永续）──
     "TRX_SWAP": {
         "symbol": "TRX-USDT-SWAP", "mode": "futures",
-        "initial_capital": 2000.0, "base_ccy": "TRX",
+        "initial_capital": 4000.0, "base_ccy": "TRX",
         "ct_val": 1000.0,   # 每张合约面值（TRX）
         "size_decimals": 0, "min_order_size": 1,
         "leverage": 3,       # TRX 波动大，低杠杆
     },
     "ETH_SWAP": {
         "symbol": "ETH-USDT-SWAP", "mode": "futures",
-        "initial_capital": 2500.0, "base_ccy": "ETH",
+        "initial_capital": 4500.0, "base_ccy": "ETH",
         "ct_val": 0.01,     # 每张合约面值（ETH）
         "size_decimals": 4, "min_order_size": 0.001,
         "leverage": 5,       # ETH 波动中等
     },
     "SOL_SWAP": {
         "symbol": "SOL-USDT-SWAP", "mode": "futures",
-        "initial_capital": 2500.0, "base_ccy": "SOL",
+        "initial_capital": 4500.0, "base_ccy": "SOL",
         "ct_val": 1.0,      # 每张合约面值（SOL）
         "size_decimals": 2, "min_order_size": 0.01,
         "market_flag": "0", # 模拟盘 SOL-USDT-SWAP 价格失真，行情数据从实盘取
