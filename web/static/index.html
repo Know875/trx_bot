@@ -909,6 +909,7 @@ function setRegime(regime) {
 // ── Candle Chart ─────────────────────────────────────────────
 function initCandleChart() {
   const container = $('chart-candle');
+  if (!container || !window.LightweightCharts) return;
   candleChart = LightweightCharts.createChart(container, {
     layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#64748b' },
     grid:   { vertLines: { color: '#1e293b' }, horzLines: { color: '#1e293b' } },
@@ -942,6 +943,7 @@ function initCandleChart() {
 
 function updateCandleChart(candles) {
   if (!candleChart) initCandleChart();
+  if (!candleChart || !candleChart._series) return;
   const s = candleChart._series;
   s.candle.setData(candles.map(c => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
   s.ema20.setData(candles.map(c => ({ time: c.time, value: c.ema20 })));
@@ -955,7 +957,9 @@ function updateCandleChart(candles) {
 
 // ── Equity Chart ─────────────────────────────────────────────
 function initEquityChart(records) {
-  const ctx = $('chart-equity').getContext('2d');
+  const el = $('chart-equity');
+  if (!el || !window.Chart) return;
+  const ctx = el.getContext('2d');
   if (equityChart) equityChart.destroy();
   const trades  = records.filter(r => r.strategy !== 'cleanup');
   const allPnl  = [0, ...trades.map(r => r.total_pnl).reverse()];
@@ -983,7 +987,9 @@ function initEquityChart(records) {
 
 // ── PnL Bar Chart ────────────────────────────────────────────
 function initPnlBarChart(records) {
-  const ctx = $('chart-pnl-bar').getContext('2d');
+  const el = $('chart-pnl-bar');
+  if (!el || !window.Chart) return;
+  const ctx = el.getContext('2d');
   if (pnlBarChart) pnlBarChart.destroy();
   const slice  = records.filter(r => r.strategy !== 'cleanup').slice(0, 50).reverse();
   const data   = slice.map(r => r.pnl);
