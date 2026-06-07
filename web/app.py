@@ -181,7 +181,11 @@ def _log_file(ccy: str) -> Path:
 
 @app.get("/")
 async def root():
-    return FileResponse(str(STATIC / "index.html"))
+    from fastapi.responses import Response as _Resp
+    return FileResponse(str(STATIC / "index.html"), headers={
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+    })
 
 
 @app.get("/api/status")

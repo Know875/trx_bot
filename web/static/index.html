@@ -793,6 +793,7 @@ async function api(path, cacheKey=null, ttl=8000) {
     if (cacheKey && _cache[cacheKey] && _cache[cacheKey][currentCoin]) {
       return _cache[cacheKey][currentCoin]._data;
     }
+    console.error('api error:', path, e.message || e);
     return {};
   }
 }
