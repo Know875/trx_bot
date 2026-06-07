@@ -882,6 +882,89 @@ def _ts_from_iso(ts: str) -> float:
         return 0
 
 
+# ═══════════════════════════════════════════════════════════════
+# 后台计算 + 缓存：给"慢任务"（measure 含回测/optuna）用，接口永不阻塞
+# ═══════════════════════════════════════════════════════════════
+
+_bg_jobs: dict = {}   # name -> {data, ts, computing, error}
+
+
+def _bg_get(name: str, fn, ttl: float) -> dict:
+    """返回后台任务的缓存；过期且未在算时，后台线程重算。当前请求立即返回（不等）。"""
+    import threading
+    job = _bg_jobs.setdefault(name, {"data": None, "ts": 0.0, "computing": False, "error": None})
+    fresh = job["data"] is not None and (time.time() - job["ts"] < ttl)
+    if not fresh and not job["computing"]:
+        job["computing"] = True
+
+        def _run():
+            try:
+                d = fn()
+                job["data"] = d
+                job["ts"] = time.time()
+                job["error"] = None
+            except Exception as e:
+                job["error"] = str(e)
+            finally:
+                job["computing"] = False
+
+        threading.Thread(target=_run, name=f"bg-{name}", daemon=True).start()
+    return job
+
+
+def _measure_compute() -> dict:
+    """跑 measure.run() 并瘦身（只留前端要的字段）。"""
+    import measure
+    raw = measure.run()
+    out = {}
+    for coin, r in raw.items():
+        if coin == "_summary":
+            continue
+        p = r.get("paper") or {}
+        out[coin] = {
+            "verdict": r.get("verdict"),
+            "note": r.get("note"),
+            "trades": p.get("trades"),
+            "days": p.get("days"),
+            "net_pnl": p.get("net_pnl"),
+            "win_rate": p.get("win_rate"),
+            "profit_factor": p.get("profit_factor"),
+            "expectancy": p.get("expectancy"),
+        }
+    try:
+        out["_reco"] = measure._overall_reco(raw)
+    except Exception:
+        out["_reco"] = ""
+    return out
+
+
+@app.get("/api/measure")
+async def get_measure():
+    """测量裁决（能否上实盘）。后台计算 + 30min 缓存，接口秒回。"""
+    job = _bg_get("measure", _measure_compute, ttl=1800)
+    return {
+        "computing": job["computing"] and job["data"] is None,
+        "updated": int(job["ts"]),
+        "error": job["error"],
+        "results": job["data"] or {},
+    }
+
+
+@app.get("/api/carry")
+async def get_carry():
+    """资金费率套利监控。后台计算 + 5min 缓存，接口秒回。"""
+    def _compute():
+        import carry
+        return carry.scan_all()
+    job = _bg_get("carry", _compute, ttl=300)
+    return {
+        "computing": job["computing"] and job["data"] is None,
+        "updated": int(job["ts"]),
+        "error": job["error"],
+        "results": job["data"] or [],
+    }
+
+
 @app.websocket("/ws")
 async def ws_price(ws: WebSocket):
     """每 3 秒推送所有币种的最新 ticker"""
