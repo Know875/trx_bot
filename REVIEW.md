@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-06-08 全流程梳理（端到端核对）
+
+把启动 → 每币主循环 → 选策略/下单 → 风控 → 持久化 → Web → 辅助工具 整条链路逐环节追了一遍。
+结论：**逻辑正确、自洽**。资金乘数链、风控单调性、浮亏回撤、SQLite 并发、鉴权均核对通过。
+
+**🔴 已修 — 启动安全检查是死代码**
+`main.py` 顶层未 `import datetime`，且引用了不存在的 `evolution_lock.LockManager`
+→ 整个启动安全检查块每次直接异常被吞 → "账户 HALT 时只监控不交易"从未生效、
+启动极端行情告警也从未触发（`_startup_blocked` 永远 False）。
+修复：① 补 `from datetime import datetime, timezone`；② 极端检查改用真实 API
+`_load_lock_log()["blocks"]`；③ 账户 HALT 检查独立 try，不被极端检查异常带崩。
+（运行中每 tick 的 `_guard.check()` 仍在 halt 时拒开新仓，故影响有限，但确是死的安全特性）
+
+**✅ 核对正常 / 上轮修复保持**
+- `self.coin` 修复完好，且被服务器 `4f75f9c` 加固为"子类未设则 raise"（fail-loud）。
+- carry_executor 安全重写保持，服务器又加了开仓轮询确认 + 平仓交叉校验。
+- 资金乘数链完整：本金 × strat_gate × guard_cap × ai_safety × 波动率自适应 × 宏观。
+- per-tick `effective_drawdown(含浮亏)`、`_guard_mult` 单调、SQLite 原子写、Web 鉴权 均正确。
+- 全量 `py_compile` 通过。
+
+**⚠️ 运维红线**：`carry_executor` 默认 dry-run（安全），但 AUTO_CARRY_COINS 与主 bot 币种重叠
+→ **做币种隔离前只能 dry-run，禁开 `CARRY_LIVE=1`**（否则与主 bot 在同币种互相平仓）。
+
+---
+
 ## 2026-06-08 复审（波动率自适应 + carry 执行器）
 
 审查对象：昨日新增的 `carry_executor.py`、`volatility_adapter.py`、per-coin 杠杆、前端崩溃修复等。
