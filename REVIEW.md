@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-06-08 复审（波动率自适应 + carry 执行器）
+
+审查对象：昨日新增的 `carry_executor.py`、`volatility_adapter.py`、per-coin 杠杆、前端崩溃修复等。
+
+**🔴 已修 — 致命：`BaseAdaptiveStrategy` 缺 `self.coin`**
+波动率自适应集成在 `base_adaptive._start_grid` 用了 `self.coin`，但该属性从未赋值
+→ TRX / TRX_SWAP 自适应策略每次启动网格即 `AttributeError`，被 main try/except 吞掉
+→ **旗舰币 TRX 网格一直没真正运行**。新增的 9 个测试只测 volatility_adapter 本身，未覆盖集成点。
+修复：base 默认 `self.coin="TRX"`，两个子类显式赋值（TRX / TRX_SWAP）。
+
+**🔴 已修 — 危险：`carry_executor.py` 安全重写**
+原版真实下单路径有：① 调不存在的 `get_positions()` → 现货先卖后崩 → 裸空；
+② 永续硬编码 `flag="1"`(模拟盘)、现货用默认 flag → 真假盘错配；③ 限价单腿风险。
+重写：默认 dry-run（实盘需 `CARRY_LIVE=1`）、两腿统一 flag、市价双腿原子开仓（失败回滚）、
+先平空再卖现货、按实际成交量对冲、成交校验。
+⚠️ 仍受运维约束：AUTO_CARRY_COINS 与主 bot 币种重叠 → 当前**只能 dry-run**，
+实盘前必须做币种隔离（否则 run_swap_coin 启动清理会平掉空腿）。
+
+**✅ 核对正常**：`volatility_adapter` 逻辑自洽且有上下界；per-coin 杠杆（TRX_SWAP=3/ETH_SWAP=5）
+让上轮的 `get_leverage(self.ccy)` 修复真正生效；前端 JS 崩溃修复后 node --check 通过；
+撤单认证、TOTAL_CAPITAL 口径一致性保持。
+
+**教训**：再次出现"加功能未覆盖集成测试 → 旗舰币停摆""下单逻辑未经 dry-run 即入库"。
+建议：① 任何新下单逻辑先 dry-run/模拟验证；② 新策略加一条最简"实例化 + start grid"集成测试。
+
+---
+
 ## 当前状态（截至最近一轮）
 
 - **工程/风控/可验证性**：良好。多层熔断、SQLite 并发地基、测试套件 + CI、看门狗冗余、回测含手续费+滑点。
