@@ -150,11 +150,15 @@ class CarryExecutor:
             before = spot.get_spot_position(base)
             # 第一腿：现货市价买入
             spot.place_order("buy", price, want_coins, order_type="market")
-            time.sleep(1.0)  # 等成交结算
-            after = spot.get_spot_position(base)
-            got = after - before
-            if got < want_coins * FILL_TOLERANCE:
-                logger.error(f"[{coin}] 现货实际到手 {got:.6f} < 预期 {want_coins:.6f}，放弃开空（不留单边）")
+            # 轮询确认成交（最多 5s）
+            for _ in range(10):
+                time.sleep(0.5)
+                after = spot.get_spot_position(base)
+                got = after - before
+                if got >= want_coins * FILL_TOLERANCE:
+                    break
+            else:
+                logger.error(f"[{coin}] 现货未足额成交: 预期{want_coins:.6f} 实际{got:.6f}")
                 return None
 
             # 第二腿：永续市价做空（按实际现货量对冲）
@@ -192,8 +196,11 @@ class CarryExecutor:
                 logger.error(f"[{coin}] 平永续空失败: {e}")
                 send_tg(f"🚨 [{coin}] Carry 平空失败，请人工检查: {e}")
                 return False
-            # 2) 卖现货（按实际持仓，避免卖超）
+            # 2) 卖现货（按实际持仓，交叉校验 pos 记录防 API 幻觉）
             held = spot.get_spot_position(base)
+            expected = pos.get("spot_coins", 0) if isinstance(pos, dict) else 0
+            if expected > 0 and abs(held - expected) / expected > 0.5:
+                logger.warning(f"[{coin}] 平仓时现货持仓 {held:.6f} 与开仓记录 {expected:.6f} 偏差 >50%，仍按实际持仓卖出")
             dec = config.COIN_CONFIG.get(coin, {}).get("size_decimals", 4)
             sell = math.floor(held * 10**dec) / 10**dec if dec > 0 else math.floor(held)
             min_sz = config.COIN_CONFIG.get(coin, {}).get("min_order_size", 0)

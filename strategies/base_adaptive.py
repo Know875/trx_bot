@@ -44,7 +44,6 @@ class BaseAdaptiveStrategy:
     def __init__(self, client, capital):
         self.client  = client
         self.capital = capital
-        self.coin    = "TRX"   # 子类覆写（TRX / TRX_SWAP）；波动率自适应按币种取基准 ATR
         self.running = False
         self._is_dead_grid = False
 
@@ -242,8 +241,11 @@ class BaseAdaptiveStrategy:
         gc = grid_count()
         
         # 波动率自适应：根据当前 ATR 调网格宽度和档位
+        coin = getattr(self, 'coin', None)
+        if coin is None:
+            raise RuntimeError(f"{type(self).__name__}: 子类未设置 self.coin（波动率基准缺失，无法启动网格）")
         grid_range, gc, _volr = volatility_adapter.get_adapted_grid_params(
-            self.coin, grid_range, gc, indicators)
+            coin, grid_range, gc, indicators)
         capital = self.capital * self._grid_position_pct()
 
         lower = mid * (1 - grid_range / 2)
