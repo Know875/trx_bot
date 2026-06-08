@@ -713,8 +713,6 @@ function hideLogin() {
   $('login-overlay').classList.add('hidden');
 }
 
-$('login-pwd')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-
 async function doLogin() {
   const pwd = $('login-pwd').value;
   if (!pwd) { $('login-err').textContent = '请输入密码'; $('login-err').classList.remove('hidden'); return; }
@@ -763,6 +761,9 @@ function setKpi(id, value, cls='') {
   el.className = el.className.replace(/text-(emerald|red|slate|white)-\d+/g, '');
   if (cls) el.classList.add(...cls.split(' '));
 }
+
+// 登录框回车触发
+$('login-pwd')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
 // ── API（自动附加 ccy 参数，支持缓存）────────────────────────
 async function api(path, cacheKey=null, ttl=8000) {
