@@ -17,6 +17,7 @@ class TRXAdaptiveStrategy(BaseAdaptiveStrategy):
 
     def __init__(self, client, capital, size_decimals=0):
         super().__init__(client, capital)
+        self.coin = "TRX"
         self._size_decimals = size_decimals
 
     # ══════════════════════════════════════════════════

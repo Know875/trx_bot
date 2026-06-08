@@ -44,6 +44,7 @@ class BaseAdaptiveStrategy:
     def __init__(self, client, capital):
         self.client  = client
         self.capital = capital
+        self.coin    = "TRX"   # 子类覆写（TRX / TRX_SWAP）；波动率自适应按币种取基准 ATR
         self.running = False
         self._is_dead_grid = False
 

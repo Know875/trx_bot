@@ -29,6 +29,7 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
 
     def __init__(self, client, capital):
         super().__init__(client, capital)
+        self.coin = "TRX_SWAP"
         self._ct_val = None
         # 合约网格特有追踪
         self._pending_long  = []   # 现货版没有的多头待平仓列表
