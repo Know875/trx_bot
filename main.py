@@ -7,6 +7,7 @@ import logging
 import threading
 import sys
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1133,21 +1134,26 @@ def main():
 
     # ── 启动前安全检查：extreme/halt/protect 状态恢复 ──────────
     _startup_blocked = False
+    # 1) 极端行情锁定告警（best-effort）
     try:
         from account_guard import _safe_parse_dt
-        from evolution_lock import LockManager
-        lm = LockManager()
+        from evolution_lock import _load_lock_log
+        blocks = _load_lock_log().get("blocks", [])
         now_utc = datetime.now(timezone.utc)
-        recent_locks = [
-            e for e in lm._load_writes()
-            if _safe_parse_dt(e.get("time", "")) and
-               (now_utc - _safe_parse_dt(e.get("time", ""))).total_seconds() < 3600
+        recent = [
+            b for b in blocks
+            if _safe_parse_dt(b.get("timestamp", "")) and
+               (now_utc - _safe_parse_dt(b.get("timestamp", ""))).total_seconds() < 3600
         ]
-        extreme_msgs = [e.get("reason","") for e in recent_locks if "extreme" in str(e.get("reason","")).lower()]
+        extreme_msgs = [b.get("reason", "") for b in recent if "extreme" in str(b.get("reason", "")).lower()]
         if extreme_msgs:
             logger.warning(f"⚠️ 启动检查：过去 1h 有 extreme_market 锁定事件 ({len(extreme_msgs)} 次)")
             logger.warning(f"   最新: {extreme_msgs[-1][:120]}")
-        # 检查 guard 状态
+    except Exception as e:
+        logger.warning(f"极端行情启动检查跳过: {e}")
+
+    # 2) 账户 HALT 检查（关键：halt 则只监控不交易）— 独立 try，不被上面影响
+    try:
         guard_status = _guard.status_report()
         if guard_status["status"] in ("halt", "protect", "warn"):
             logger.warning(f"⚠️ 启动检查：账户守护者状态={guard_status['status']}, 日PnL={guard_status['daily_pnl_pct']:+.1f}%")
@@ -1155,7 +1161,7 @@ def main():
                 logger.error("❌ 启动时账户处于 HALT 状态，仅恢复监控不启动策略")
                 _startup_blocked = True
     except Exception as e:
-        logger.warning(f"启动安全检查失败（不影响启动）: {e}")
+        logger.warning(f"账户状态启动检查失败（不影响启动）: {e}")
 
     # ── TOTAL_CAPITAL 与真实账户权益一致性检查 ────────────────
     try:
