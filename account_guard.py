@@ -82,10 +82,10 @@ PER_COIN_BUDGET_RATIO = 0.40  # 单币种日亏超总预算 40% → 暂停
 COIN_DAILY_BUDGET = {
     "TRX":      10,
     "ETH":      25,
-    "SOL":      25,
+    "SOL":      60,
     "TRX_SWAP": 10,
     "ETH_SWAP": 20,
-    "SOL_SWAP": 12,
+    "SOL_SWAP": 30,
 }
 
 

@@ -28,6 +28,7 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [watchdog] %(levelname)s: %(message)s")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("watchdog")
 
 ROOT = Path(__file__).parent
@@ -138,12 +139,38 @@ def main():
             issues.append("无锁文件 — bot 从未启动")
 
     # ── 3. 数据库活跃度 ──
+    # 优先检查 DB 内的 bot_heartbeat 键（每 15 分钟写一次，不依赖成交）；
+    # 键不存在（旧版本或首次启动）时回退到文件 mtime。
     if DB_FILE.exists():
-        db_age = time.time() - DB_FILE.stat().st_mtime
-        if db_age > 1800:  # 30 分钟
-            issues.append(f"DB 无新写入 {db_age/60:.0f}min")
-            if can_alert("db_stale"):
-                send_tg(f"🟡 看门狗: bot_state.db {db_age/60:.0f}min 无新写入")
+        db_hb_age = None
+        try:
+            import sqlite3, time as _time
+            conn = sqlite3.connect(str(DB_FILE), timeout=5)
+            row = conn.execute(
+                "SELECT value FROM guard_state WHERE key='bot_heartbeat'"
+            ).fetchone()
+            conn.close()
+            if row:
+                from datetime import datetime, timezone
+                hb_dt = datetime.fromisoformat(row[0].replace("Z", "+00:00"))
+                if hb_dt.tzinfo is None:
+                    hb_dt = hb_dt.replace(tzinfo=timezone.utc)
+                db_hb_age = (datetime.now(timezone.utc) - hb_dt).total_seconds()
+        except Exception:
+            pass
+
+        if db_hb_age is not None:
+            if db_hb_age > 1800:  # 心跳键超过 30 分钟未更新 = 真正异常
+                issues.append(f"DB 心跳 {db_hb_age/60:.0f}min 未更新")
+                if can_alert("db_stale"):
+                    send_tg(f"🟡 看门狗: bot_state.db 心跳 {db_hb_age/60:.0f}min 未更新")
+        else:
+            # 回退：键不存在时用文件 mtime，但阈值放宽到 2 小时（避免无成交误报）
+            db_age = time.time() - DB_FILE.stat().st_mtime
+            if db_age > 7200:
+                issues.append(f"DB 无新写入 {db_age/60:.0f}min")
+                if can_alert("db_stale"):
+                    send_tg(f"🟡 看门狗: bot_state.db {db_age/60:.0f}min 无新写入")
     else:
         issues.append("无 bot_state.db")
 

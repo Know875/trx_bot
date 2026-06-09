@@ -284,7 +284,6 @@ def run_coin(ccy: str, stop_event: threading.Event):
             if sr["mode"] != "normal" and not sr["allowed"]:
                 logger.info(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
             else:
-                all_blocked = False  # 至少一个可用
                 break
         else:
             if StrategyGuard._get_coin_strategies(ccy):
@@ -411,6 +410,29 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             trx_strat.start(new_regime, price,
                                             capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                             indicators=indicators)
+
+                    # 网格停滞检测：运行中但长时间无成交 → 强制重组
+                    STAGNATION_HOURS = 6  # 超过6h无成交视为停滞
+                    if trx_strat and trx_strat.running and tracker.records:
+                        try:
+                            last_time = tracker.records[-1].get("time", "")
+                            if last_time:
+                                from datetime import datetime as dt
+                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
+                                stale_h = (now - last_ts) / 3600
+                                if stale_h > STAGNATION_HOURS:
+                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                    pnl = trx_strat.stop()
+                                    if pnl != 0:
+                                        tracker.record(pnl, "trx_adaptive")
+                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
+                                    if _sg_allowed and _guard_can_open:
+                                        trx_strat.start(new_regime, price,
+                                                        capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                        indicators=indicators)
+                                        logger.info(f"🔧 {ccy} 网格重组完成")
+                        except Exception:
+                            pass
                 else:
                     # 行情切换策略（ETH / SOL）— 带冷却，避免频繁切换市价平仓
                     if new_regime != current_regime:
@@ -499,6 +521,41 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             else:
                                 logger.info("行情不明朗，空仓等待")
 
+                    # 通用网格停滞检测（ETH/SOL spot）：运行中但长时间无成交 → 强制重组
+                    STAGNATION_HOURS = 6
+                    if not is_trx and current_strategy and tracker.records:
+                        try:
+                            name, strat = current_strategy
+                            if name == "grid" and strat.running:
+                                last_time = tracker.records[-1].get("time", "")
+                                if last_time:
+                                    from datetime import datetime as dt
+                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
+                                    stale_h = (now - last_ts) / 3600
+                                    if stale_h > STAGNATION_HOURS:
+                                        logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                        _pnl = strat.stop()
+                                        if _pnl:
+                                            tracker.record(_pnl, name)
+                                        _grid_allowed, _grid_mult = _strat_gate(ccy, "grid")
+                                        if _grid_allowed and _guard_can_open:
+                                            coin_base = ccy.split("-")[0]
+                                            gc = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
+                                            gr = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                            lower, upper = get_range_bounds(df, gr)
+                                            new_strat = GridStrategy(
+                                                client=client, lower=lower, upper=upper,
+                                                grid_count=gc,
+                                                capital=initial_capital * _grid_mult * _guard_cap_mult * _ai_safety_mult,
+                                                size_decimals=size_dec, symbol=ccy,
+                                            )
+                                            new_strat.start(price)
+                                            current_strategy = ("grid", new_strat)
+                                            logger.info(f"🔧 {ccy} 网格重组完成")
+                        except Exception:
+                            pass
+
                     elif new_regime in ("trending_up", "trending_down") and current_strategy:
                         name, strat = current_strategy
                         if name == "trend" and strat.running and not strat._can_reenter:
@@ -559,11 +616,11 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                     )
                                     last_regime_check = 0  # 下一轮强制重检行情
                                     continue
-                            # 4) 通过所有检查 → 重新入场
-                            logger.info(f"止损后行情仍为 {new_regime}，重新评估入场")
-                            strat.start(new_regime, price, indicators=indicators)
-                            consecutive_trend_losses += 1  # 假设这次是止损（会在 on_tick 中重置）
+                            # 4) 通过所有检查 → 重新入场（本次止损计入连续亏损）
+                            consecutive_trend_losses += 1
                             last_trend_loss_time = now_ts
+                            logger.info(f"止损后行情仍为 {new_regime}，重新评估入场（连续止损 {consecutive_trend_losses} 次）")
+                            strat.start(new_regime, price, indicators=indicators)
 
             except Exception as e:
                 logger.error(f"行情检查异常: {e}")
@@ -717,7 +774,6 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
             if sr["mode"] != "normal" and not sr["allowed"]:
                 logger.info(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
             else:
-                all_blocked = False
                 break
         else:
             if StrategyGuard._get_coin_strategies(ccy):
@@ -834,6 +890,29 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                             trx_swap_strat.start(new_regime, price,
                                                  capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                  indicators=indicators)
+
+                    # 网格停滞检测（合约）：运行中但长时间无成交 → 强制重组
+                    STAGNATION_HOURS = 6
+                    if trx_swap_strat and trx_swap_strat.running and tracker.records:
+                        try:
+                            last_time = tracker.records[-1].get("time", "")
+                            if last_time:
+                                from datetime import datetime as dt
+                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
+                                stale_h = (now - last_ts) / 3600
+                                if stale_h > STAGNATION_HOURS:
+                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                    pnl = trx_swap_strat.stop()
+                                    if pnl != 0:
+                                        tracker.record(pnl, "trx_adaptive_futures")
+                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
+                                    if _sg_allowed and _guard_can_open:
+                                        trx_swap_strat.start(new_regime, price,
+                                                             capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                             indicators=indicators)
+                                        logger.info(f"🔧 {ccy} 网格重组完成")
+                        except Exception:
+                            pass
                 else:
                     if new_regime != current_regime:
                         if now - last_switch_time < SWITCH_COOLDOWN:
@@ -926,6 +1005,42 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                     logger.info("资金费率不利，空仓等待")
                             else:
                                 logger.info("行情不明朗，空仓等待")
+
+                    # 通用期货网格停滞检测（ETH_SWAP/SOL_SWAP）：运行中但长时间无成交 → 强制重组
+                    STAGNATION_HOURS = 6
+                    if not is_trx_swap and current_strategy and tracker.records:
+                        try:
+                            name, strat = current_strategy
+                            if name == "futures_grid" and strat.running:
+                                last_time = tracker.records[-1].get("time", "")
+                                if last_time:
+                                    from datetime import datetime as dt
+                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
+                                    stale_h = (now - last_ts) / 3600
+                                    if stale_h > STAGNATION_HOURS:
+                                        logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
+                                        _pnl = strat.stop()
+                                        if _pnl:
+                                            tracker.record(_pnl, name)
+                                        _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
+                                        if _fb_allowed and _guard_can_open:
+                                            coin_base = ccy.split("-")[0]
+                                            gc = getattr(config, f"{coin_base}_GRID_COUNT", config.GRID_COUNT)
+                                            gr = getattr(config, f"{coin_base}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                            lower, upper = get_range_bounds(df, gr)
+                                            new_strat = FuturesGridStrategy(
+                                                client=client, lower=lower, upper=upper,
+                                                grid_count=gc,
+                                                capital=initial_capital * _fb_mult * _guard_cap_mult * _ai_safety_mult,
+                                                symbol=ccy,
+                                            )
+                                            new_strat.start(price)
+                                            current_strategy = ("futures_grid", new_strat)
+                                            logger.info(f"🔧 {ccy} 合约网格重组完成")
+                        except Exception:
+                            pass
+
                     elif new_regime in ("trending_up", "trending_down") and current_strategy:
                         name, strat = current_strategy
                         if name == "futures_trend" and strat.running and not getattr(strat, '_can_reenter', True):
@@ -995,11 +1110,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                     )
                                     last_regime_check = 0
                                     continue
-                            # 4) 通过所有检查 → 重新入场
-                            logger.info(f"止损后行情仍为 {new_regime}，重新评估入场")
-                            strat.start(new_regime, price, indicators=indicators)
+                            # 4) 通过所有检查 → 重新入场（本次止损计入连续亏损）
                             consecutive_trend_losses += 1
                             last_trend_loss_time = now_ts
+                            logger.info(f"止损后行情仍为 {new_regime}，重新评估入场（连续止损 {consecutive_trend_losses} 次）")
+                            strat.start(new_regime, price, indicators=indicators)
 
             except Exception as e:
                 logger.error(f"行情检查异常: {e}")
@@ -1129,6 +1244,7 @@ def main():
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     logger = logging.getLogger("main")
     logger.info(f"=== 量化机器人启动，交易对: {config.COINS} ===")
 
@@ -1163,33 +1279,36 @@ def main():
     except Exception as e:
         logger.warning(f"账户状态启动检查失败（不影响启动）: {e}")
 
-    # ── TOTAL_CAPITAL 与真实账户权益一致性检查 ────────────────
-    try:
-        check_client = OKXClient(symbol="TRX-USDT-SWAP")
-        usdt_balance = check_client.get_balance("USDT")
-        total_in_config = sum(c["initial_capital"] for c in config.COIN_CONFIG.values())
-        cfg_total = getattr(config, "TOTAL_CAPITAL", total_in_config)
-        if usdt_balance > 0 and total_in_config > 0:
-            gap_pct = abs(usdt_balance - cfg_total) / cfg_total
-            if gap_pct > 0.20:
-                logger.warning(
-                    f"⚠️ TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
-                    f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
-                )
-            elif gap_pct > 0.05:
-                logger.info(
-                    f"📊 TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
-                    f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
-                )
-            else:
-                logger.info(
-                    f"✅ TOTAL_CAPITAL 一致性 OK: config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT "
-                    f"(偏差 {gap_pct:.1%})"
-                )
-        elif usdt_balance <= 0:
-            logger.warning("⚠️ 无法获取账户 USDT 余额，跳过一致性检查")
-    except Exception as e:
-        logger.warning(f"⚠️ TOTAL_CAPITAL 一致性检查失败（不影响启动）: {e}")
+    # ── TOTAL_CAPITAL 与真实账户权益一致性检查（仅实盘）────────────────
+    if getattr(config, "FLAG", "1") == "1":
+        logger.info("📊 模拟盘模式 — 跳过 TOTAL_CAPITAL 一致性检查")
+    else:
+        try:
+            check_client = OKXClient(symbol="TRX-USDT-SWAP")
+            usdt_balance = check_client.get_balance("USDT")
+            total_in_config = sum(c["initial_capital"] for c in config.COIN_CONFIG.values())
+            cfg_total = getattr(config, "TOTAL_CAPITAL", total_in_config)
+            if usdt_balance > 0 and total_in_config > 0:
+                gap_pct = abs(usdt_balance - cfg_total) / cfg_total
+                if gap_pct > 0.20:
+                    logger.warning(
+                        f"⚠️ TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
+                        f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
+                    )
+                elif gap_pct > 0.05:
+                    logger.info(
+                        f"📊 TOTAL_CAPITAL 与账户权益偏差 {gap_pct:.1%}: "
+                        f"config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT"
+                    )
+                else:
+                    logger.info(
+                        f"✅ TOTAL_CAPITAL 一致性 OK: config={cfg_total:.0f} vs 账户={usdt_balance:.0f} USDT "
+                        f"(偏差 {gap_pct:.1%})"
+                    )
+            elif usdt_balance <= 0:
+                logger.warning("⚠️ 无法获取账户 USDT 余额，跳过一致性检查")
+        except Exception as e:
+            logger.warning(f"⚠️ TOTAL_CAPITAL 一致性检查失败（不影响启动）: {e}")
 
     stop_event = threading.Event()
     threads = []
@@ -1222,14 +1341,24 @@ def main():
         time.sleep(2)  # 错开各线程的首次行情请求
 
     try:
+        from state_db import GuardStateDB
+        _hb_db = GuardStateDB()
         last_macro_update = 0
         last_hb_check = 0
+        last_db_hb = 0
         heartbeat_path = Path(__file__).parent / ".bot_heartbeat"
         _alert_state = {"last_stale": 0, "last_stop": 0, "was_alerted": False}
         while True:
             now = time.time()
             # 心跳：每轮 tick 更新
             heartbeat_path.touch()
+            # DB 心跳：每 15 分钟写一次，让 watchdog 区分"无成交"和"系统卡死"
+            if now - last_db_hb > 900:
+                try:
+                    _hb_db.write_heartbeat()
+                except Exception:
+                    pass
+                last_db_hb = now
 
             # ── 心跳告警（每30秒检查一次，防抖：同类10分钟一次） ──
             if now - last_hb_check > 30:

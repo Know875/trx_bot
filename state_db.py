@@ -181,6 +181,10 @@ class GuardStateDB:
         ).fetchone()
         return row["cnt"] if row else 0
 
+    def write_heartbeat(self):
+        """定期写入心跳时间戳，让 watchdog 区分'无成交'和'系统卡死'。"""
+        self.set("bot_heartbeat", datetime_str())
+
 
 # ═══════════════════════════════════════════════════════════
 # 策略状态数据库

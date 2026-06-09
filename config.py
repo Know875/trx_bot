@@ -161,7 +161,7 @@ SOL_TREND_RSI_OB      = 65
 SOL_TREND_RSI_OS      = 35
 
 # ── TRX 专属参数（基于 TRX 行为研究 + 180天回测）──────────
-TRX_GRID_COUNT          = 3
+TRX_GRID_COUNT          = 5  # was 3 → 5 防网格饱和停滞
 TRX_GRID_COUNT_NON_PEAK = 9
 TRX_GRID_RANGE_PCT      = 0.05
 TRX_NARROW_GRID_RANGE_PCT = 0.02
@@ -226,4 +226,4 @@ SOL_FUTURES_MAX_GRID_ENTRIES = 3.0 # 合约网格最多同时持有 4 个买入�
 # ── 行情 ──────────────────────────────────────────────────────
 CANDLE_BAR   = "15m"
 CANDLE_LIMIT = 100
-
+grid_range_pct = 0.122  # was 0.046
