@@ -411,6 +411,8 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                         trx_strat.start(new_regime, price,
                                                         capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                         indicators=indicators)
+                                        # 记录重组时间戳，防止陷入无限重启循环
+                                        tracker.record(0, "trx_adaptive", note="grid_restart")
                                         logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
@@ -534,6 +536,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                             new_strat.start(price)
                                             current_strategy = ("grid", new_strat)
                                             logger.info(f"🔧 {ccy} 网格重组完成")
+                                            tracker.record(0, "grid", note="grid_restart")
                         except Exception:
                             pass
 
@@ -892,6 +895,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                                              capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                              indicators=indicators)
                                         logger.info(f"🔧 {ccy} 网格重组完成")
+                                        tracker.record(0, "trx_adaptive_futures", note="grid_restart")
                         except Exception:
                             pass
                 else:
@@ -1019,6 +1023,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                             new_strat.start(price)
                                             current_strategy = ("futures_grid", new_strat)
                                             logger.info(f"🔧 {ccy} 合约网格重组完成")
+                                            tracker.record(0, "futures_grid", note="grid_restart")
                         except Exception:
                             pass
 
