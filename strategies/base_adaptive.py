@@ -227,6 +227,10 @@ class BaseAdaptiveStrategy:
 
     def _start_grid(self, current_price, indicators=None):
         from strategies.trx_utils import is_asia_peak, grid_count
+
+        # 启动前先清旧单：防止上次残留的挂单（如 _startup_cleanup 的限价卖单）
+        # 与新网格冲突，导致资金锁死
+        self._cancel_all_pending()
         
         ind = indicators or {}
         vwap = ind.get("vwap", 0)

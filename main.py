@@ -155,7 +155,8 @@ def _startup_cleanup(client: OKXClient, ccy: str, logger: logging.Logger, tracke
     except Exception as e:
         logger.warning(f"[启动清理] 撤限价单失败: {e}")
 
-    # 现货：残留持仓不市价砸，挂限价卖单保本出售
+    # 现货：残留持仓不市价砸（交给策略管理，不再挂限价卖单）
+    # 原因是挂限价卖单会与策略网格冲突，导致资金被锁在"幽灵订单"中无法使用
     base = _SPOT_BASE_CCY.get(ccy)
     if base:
         try:
@@ -164,30 +165,10 @@ def _startup_cleanup(client: OKXClient, ccy: str, logger: logging.Logger, tracke
             price   = float(ticker["last"])
             min_sz  = config.COIN_CONFIG[ccy].get("min_order_size", 1)
             if holding >= min_sz:
-                avg_cost = 0.0
-                try:
-                    avg_cost = client.get_avg_cost()
-                except Exception as e:
-                    logger.warning(f"[启动清理] 查询买入均价失败: {e}")
-
-                # 限价卖出：成本+0.5% 或 当前价+0.2%，取较高者保本优先
-                limit_sell = max(avg_cost * 1.005, price * 1.002) if avg_cost > 0 else price * 1.005
-                limit_sell = round(limit_sell, 2)
-                logger.warning(
-                    f"[启动清理] 检测到残留 {base} 持仓 {holding}（均价 {avg_cost:.4f}），"
-                    f"挂限价卖单 @ {limit_sell}，不市价砸盘"
+                logger.info(
+                    f"[启动清理] 检测到残留 {base} 持仓 {holding} "
+                    f"（当前价 {price:.4f}），交给策略管理，不自动卖出"
                 )
-                try:
-                    client.place_order("sell", limit_sell, holding)
-                    logger.info(f"[启动清理] 已挂限价卖单 {holding} {base} @ {limit_sell}")
-                    # 不立即计入盈亏，等成交后由网格 on_tick 或下次清理结算
-                    if tracker and avg_cost > 0:
-                        logger.info(
-                            f"[启动清理] 持仓成本 {avg_cost:.6f} 限价 {limit_sell:.6f}"
-                            f" 预期盈亏 {holding * (limit_sell - avg_cost):+.4f} USDT（待成交）"
-                        )
-                except Exception as e:
-                    logger.error(f"[启动清理] 挂限价卖单失败: {e}")
         except Exception as e:
             logger.error(f"[启动清理] 残留持仓检查/平仓失败: {e}")
 
