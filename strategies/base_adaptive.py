@@ -257,9 +257,17 @@ class BaseAdaptiveStrategy:
 
         step_pct = (upper - lower) / lower / gc
         if step_pct < config.TRX_GRID_MIN_PROFIT_PCT:
-            logger.warning(f"网格间距 {step_pct:.4%} < {config.TRX_GRID_MIN_PROFIT_PCT:.4%}")
-            self._cooldown = 3
-            return
+            logger.warning(f"波动率适配后网格间距 {step_pct:.4%} < {config.TRX_GRID_MIN_PROFIT_PCT:.4%}，回退为未适配参数")
+            # 回退：用未适配的原始范围重算，避免无限冷却重启
+            grid_range = config.TRX_NARROW_GRID_RANGE_PCT if self._is_dead_grid else config.TRX_GRID_RANGE_PCT
+            gc = grid_count()
+            lower = mid * (1 - grid_range / 2)
+            upper = mid * (1 + grid_range / 2)
+            step_pct = (upper - lower) / lower / gc
+            if step_pct < config.TRX_GRID_MIN_PROFIT_PCT:
+                logger.error(f"回退后网格间距 {step_pct:.4%} 仍不足，暂停")
+                self._cooldown = 3
+                return
 
         step = (upper - lower) / gc
         self._grid_prices = [round(lower + i * step, 6) for i in range(gc + 1)]
