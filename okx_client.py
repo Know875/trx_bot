@@ -282,7 +282,7 @@ class OKXClient:
         details = result["data"][0]["details"]
         for item in details:
             if item["ccy"] == base_ccy:
-                return float(item.get("cashBal", item["availBal"]))
+                return float(item.get("availBal", item.get("cashBal", 0)))
         return 0.0
 
     @_retry()

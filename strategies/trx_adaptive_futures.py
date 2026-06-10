@@ -182,6 +182,10 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
 
         total_pnl = 0.0
         try:
+            pos = self.client.get_futures_position()
+            if not pos or float(pos.get("pos", 0)) == 0:
+                logger.info("[合约网格平仓] 交易所无持仓，跳过平仓")
+                return 0.0
             self.client.close_futures_position()
             ct_val = self._get_ct_val()
             for pos in pending_long:
