@@ -163,7 +163,16 @@ class CarryExecutor:
 
             # 第二腿：永续市价做空（按实际现货量对冲）
             ct_val = swap.get_ct_val()
-            contracts = max(1, round(got / ct_val))
+            # 向下取整，避免 round 把不足1张凑成1张 → 空腿大于现货 → 净空头裸仓。
+            contracts = math.floor(got / ct_val)
+            if contracts < 1:
+                logger.error(f"[{coin}] 对冲张数不足1张(现货{got:.6f}/面值{ct_val})，回滚现货")
+                try:
+                    spot.place_order("sell", price, got, order_type="market")
+                except Exception as e2:
+                    logger.error(f"[{coin}] ⚠️ 现货回滚失败，需人工介入: {e2}")
+                    send_tg(f"🚨 [{coin}] Carry 现货已买但无法对冲且回滚失败，请立即人工平掉现货")
+                return None
             try:
                 swap.set_leverage()
                 swap.place_futures_order("sell", contracts, order_type="market")

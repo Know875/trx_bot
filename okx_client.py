@@ -348,7 +348,15 @@ class OKXClient:
 
     @_retry()
     def set_leverage(self, lever=None, mgnMode=None):
-        lever = str(lever or config.get_leverage(self.symbol))
+        if lever is None:
+            # self.symbol 是交易对符号(如 TRX-USDT-SWAP)，但 get_leverage 的键是币种键
+            # (如 TRX_SWAP)。按 symbol 反查币种键，避免每次退回默认杠杆、忽略 per-coin 配置。
+            lever = next(
+                (config.get_leverage(k) for k, v in config.COIN_CONFIG.items()
+                 if v.get("symbol") == self.symbol),
+                config.FUTURES_DEFAULT_LEVERAGE,
+            )
+        lever = str(lever)
         mgnMode = mgnMode or config.FUTURES_MARGIN_MODE
         result = self.account.set_leverage(instId=self.symbol, lever=lever, mgnMode=mgnMode)
         if result["code"] != "0":

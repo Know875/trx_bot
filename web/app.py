@@ -1,9 +1,11 @@
 """FastAPI dashboard — 支持 TRX / ETH / SOL 多币种"""
-import sys, os, time, secrets
+import sys, os, time, secrets, logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 from pathlib import Path
+
+logger = logging.getLogger("web")
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,10 +21,16 @@ STATIC  = Path(__file__).parent / "static"
 BOT_DIR = Path(__file__).parent.parent
 
 app = FastAPI(title="Multi-Coin Bot Dashboard")
-# 仅允许本地和同源请求，敏感接口需要认证
+# 仅允许显式配置的源（默认本地）。面板前端与后端同源，同源请求不受 CORS 限制，
+# 故收紧 allow_origins 不影响面板自身，但能阻止任意外站跨域读取持仓/余额/盈亏。
+# 需放开额外源时设环境变量 DASHBOARD_ORIGINS=逗号分隔的源列表。
+_origins_env = os.getenv("DASHBOARD_ORIGINS", "")
+_ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(",") if o.strip()] or [
+    "http://localhost:8000", "http://127.0.0.1:8000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )

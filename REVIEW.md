@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-06-10 复审（Web 安全 + 杠杆链路 + carry 对冲）
+
+对全新拉取的最新版（`6af5664`）做端到端复审，重点 Web 安全、合约杠杆落地、本次新改的网格间距死循环逻辑。**核心资金链（资金乘数、熔断单调性、浮亏纳入回撤、carry 回滚、网格回退）核对正确**；发现并修复 3 项问题 + 1 次要项。
+
+**🔴 已修 — `web/app.py` 引用未定义的 `logger`**
+全文件无 `import logging`/无 `logger=getLogger`，但第 41 行在 `if not _AUTH_ENABLED:` 分支里调用 `logger.error(...)`。
+→ 当 `DASHBOARD_PASSWORD` 未设置或为弱口令时，import 阶段直接 `NameError`，**面板起不来**——本该「降级为只读+强制认证」的保护分支反而把面板搞崩，首次未配密码的部署必踩。
+修复：顶部 `import logging` + `logger = logging.getLogger("web")`。（dashboard 与交易主进程分离，不影响实盘交易。）
+
+**🟠 已修 — per-coin 杠杆未真正落到交易所，TRX_SWAP 实跑 5x 而非配置 3x**
+`okx_client.set_leverage()` 默认值 `config.get_leverage(self.symbol)`，但 `self.symbol` 是交易对符号（`TRX-USDT-SWAP`），`get_leverage` 的键是币种键（`TRX_SWAP`）→ 永远查不到 → 退回默认 5。所有交易路径均无参调用 `set_leverage()`。
+→ 下单算张数用的是币种键（3x 正确），但交易所实际杠杆被设 5x → **保证金按 5x 锁定、强平价更近、爆仓缓冲被削**，正好打在波动最大、明确要低杠杆的 TRX 上。ETH/SOL 配置本就是 5 恰好蒙对。
+这是上轮「`get_leverage(self.ccy)` 修复」遗漏的一环：修了算张数取值，没修真正设交易所杠杆的默认值；`test_get_leverage` 只测 config 函数本身、未覆盖 set_leverage 路径。
+修复：`set_leverage` 无参时按 `self.symbol` 反查 `COIN_CONFIG` 取币种键杠杆，查不到才退默认。
+
+**🟡 已修 — CORS `allow_origins=["*"]` 与注释「仅同源」矛盾**
+配上「GET 免认证（只读监控）」后，`/api/position`、`/api/futures/position`、`/api/overview`、`/api/carry` 等暴露持仓/余额/盈亏 → 任意外站可跨域 JS 读取账户财务（泄露策略）。
+修复：`allow_origins` 收敛为环境变量 `DASHBOARD_ORIGINS`（默认本地）。面板前后端同源，同源请求不受 CORS 限制，收紧不影响面板自身，但阻断外站跨域读取。
+
+**🔸 已修（次要）— carry 对冲张数 `max(1, round(got/ct_val))`**
+小额下不足 1 张被强制凑成 1 张 → 空腿大于现货 → 净空头裸仓。改为 `math.floor`，不足 1 张则回滚现货并放弃开仓。（carry 仍默认 dry-run。）
+
+**✅ 核对正常**：网格间距死循环修复（适配后过小→回退原始配置→仍不足才冷却3tick，不会无限重启）；`_guard_mult` 单调；`_floating_pnl` 浮亏纳入回撤；carry 两腿同 flag + 第二腿失败回滚；okx_client 重试退避 + 订单不存在计数防死循环 + get_avg_cost 分页结算。
+
+**遗漏教训**：再次出现「config 改对了取值口径，但真正调用 API 的默认参数没同步」——建议为 set_leverage 加一条断言/集成测试（设完查回杠杆比对）。
+
+---
+
 ## 2026-06-08 全流程梳理（端到端核对）
 
 把启动 → 每币主循环 → 选策略/下单 → 风控 → 持久化 → Web → 辅助工具 整条链路逐环节追了一遍。
