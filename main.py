@@ -202,6 +202,114 @@ def _make_file_logger(name: str, log_path: Path, also_route: list[str] | None = 
     return logger
 
 
+# ══════════════════════════════════════════════════════════════
+# 孤儿仓位检测：策略全部熔断时自动安全退出
+# ══════════════════════════════════════════════════════════════
+
+_orphan_alerted = {}       # 币种 -> 上次告警时间戳，避免重复刷屏
+_ORPHAN_ALERT_COOLDOWN = 3600  # 最多每小时告警一次
+
+
+def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger):
+    """现货币种：所有策略被封 + 仍有持仓 → 限价卖出清仓"""
+    global _orphan_alerted
+    try:
+        # 只处理有永久禁用策略的情况，暂停/试用期不自动清仓
+        has_disabled = any(
+            sguard.check(ccy, s)["mode"] == "disabled"
+            for s in StrategyGuard._get_coin_strategies(ccy)
+        )
+        if not has_disabled:
+            return
+
+        pos = client.get_spot_position(ccy)
+        ticker = client.get_ticker()
+        price = float(ticker.get("last", 0))
+        if not pos or pos <= 0 or price <= 0:
+            return
+
+        pos_value = pos * price
+        if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
+            return  # 告警冷却中
+
+        logger.error(
+            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos:.4f} {ccy} (${pos_value:.2f}) 裸持仓 — "
+            f"自动挂限价卖单 @ ${price:.4f}"
+        )
+        _orphan_alerted[ccy] = time.time()
+
+        send_tg(
+            f"🚨 孤儿仓位告警\n\n"
+            f"币种: {ccy}\n"
+            f"持仓: {pos:.4f} {ccy} ≈ ${pos_value:.2f}\n"
+            f"策略状态: 全部永久禁用\n"
+            f"操作: 自动挂限价卖单 @ ${price:.4f}"
+        )
+
+        # 限价卖出全部持仓
+        try:
+            # 清除旧网格残留挂单
+            pending = client.get_pending_orders()
+            if pending:
+                logger.info(f"  🧹 清除 {ccy} 残留 {len(pending)} 个挂单")
+                client.cancel_all_orders()
+
+            from strategies import trx_utils
+            min_size = trx_utils.get_min_size(ccy)
+            sz = max(min_size, trx_utils.round_size(pos * 0.999, ccy))
+            client.place_order("sell", price, sz)
+            logger.info(f"  ✅ 已挂孤儿仓位卖单: {sz:.4f} {ccy} @ ${price:.4f}")
+        except Exception as e:
+            logger.error(f"  ❌ 挂孤儿仓位卖单失败: {e}")
+
+    except Exception as e:
+        logger.debug(f"孤儿仓位检测异常(非致命): {e}")
+
+
+def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
+    """合约币种：所有策略被封 + 仍有持仓 → 市价平仓"""
+    global _orphan_alerted
+    try:
+        has_disabled = any(
+            sguard.check(ccy, s)["mode"] == "disabled"
+            for s in StrategyGuard._get_coin_strategies(ccy)
+        )
+        if not has_disabled:
+            return
+
+        pos = client.get_futures_position()
+        if not pos:
+            return
+        pos_qty = float(pos.get("pos", 0))
+        if pos_qty == 0:
+            return
+
+        if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
+            return
+
+        logger.error(
+            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos_qty} 张合约持仓 — 自动平仓"
+        )
+        _orphan_alerted[ccy] = time.time()
+
+        send_tg(
+            f"🚨 孤儿仓位告警\n\n"
+            f"币种: {ccy}\n"
+            f"持仓: {pos_qty} 张合约\n"
+            f"策略状态: 全部永久禁用\n"
+            f"操作: 自动市价平仓"
+        )
+
+        try:
+            client.close_futures_position()
+            logger.info(f"  ✅ 已平孤儿合约仓位: {pos_qty} 张")
+        except Exception as e:
+            logger.error(f"  ❌ 平孤儿合约仓位失败: {e}")
+
+    except Exception as e:
+        logger.debug(f"孤儿仓位检测异常(非致命): {e}")
+
+
 def run_coin(ccy: str, stop_event: threading.Event):
     coin_cfg = config.COIN_CONFIG[ccy]
     symbol          = coin_cfg["symbol"]
@@ -271,6 +379,8 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 all_blocked = True
         if all_blocked:
             logger.warning(f"⚠️ {ccy} 所有策略已熔断 — 跳过")
+            # ── 孤儿仓位检测：策略全封仍有持仓 → 尝试安全退出 ──
+            _check_and_exit_orphan_spot(ccy, client, _sguard, logger)
             stop_event.wait(CHECK_INTERVAL)
             continue
 
@@ -764,6 +874,8 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 all_blocked = True
         if all_blocked:
             logger.warning(f"⚠️ {ccy} 所有策略已熔断 — 跳过")
+            # ── 孤儿仓位检测：合约策略全封仍有持仓 → 平仓退出 ──
+            _check_and_exit_orphan_swap(ccy, client, _sguard, logger)
             stop_event.wait(CHECK_INTERVAL)
             continue
 
