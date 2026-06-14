@@ -258,9 +258,11 @@ def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger):
             cc = config.COIN_CONFIG.get(ccy, {})
             decimals = cc.get("size_decimals", 4)
             min_sz = cc.get("min_order_size", 0.001)
-            sz = round(pos * 0.999, decimals)
+            import math
+            factor = 10 ** decimals
+            sz = math.floor(pos * 0.999 * factor) / factor
             if sz < min_sz:
-                logger.warning(f"  ⚠️  {ccy} 持仓 {pos} 四舍五入后不足最小下单量 {min_sz}，跳过")
+                logger.info(f"  ℹ️  {ccy} 残仓 {pos:.6f} 不足最小下单量 {min_sz}，跳过")
                 return
             client.place_order("sell", price, sz)
             logger.info(f"  ✅ 已挂孤儿仓位卖单: {sz:.4f} {ccy} @ ${price:.4f}")
@@ -366,7 +368,9 @@ def _coin_stop_loss_check(ccy: str, client, logger) -> bool:
                 # 限价卖出全部
                 decimals = cc.get("size_decimals", 4)
                 min_sz = cc.get("min_order_size", 0.001)
-                sz = round(pos * 0.999, decimals)
+                import math
+                factor = 10 ** decimals
+                sz = math.floor(pos * 0.999 * factor) / factor
                 if sz >= min_sz:
                     client.place_order("sell", price, sz)
                     logger.info(f"  ✅ 止损卖单已挂: {sz:.4f} {base_ccy} @ ${price:.4f}")
