@@ -315,6 +315,68 @@ def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
         logger.debug(f"孤儿仓位检测异常(非致命): {e}")
 
 
+def _coin_stop_loss_check(ccy: str, client, logger) -> bool:
+    """单币种止损检查：未实现亏损 > STOP_LOSS_PCT × initial_capital → 强制退出
+    返回 True 表示已触发止损并退出，False 表示正常"""
+    try:
+        cc = config.COIN_CONFIG.get(ccy, {})
+        cap = cc.get("initial_capital", 5000)
+        stop_threshold = cap * config.COIN_STOP_LOSS_PCT
+        swap_mode = "_SWAP" in ccy
+
+        if swap_mode:
+            pos = client.get_futures_position()
+            if not pos:
+                return False
+            pos_qty = float(pos.get("pos", 0))
+            if pos_qty == 0:
+                return False
+            upl = float(pos.get("upl", 0))
+            if upl < 0 and abs(upl) > stop_threshold:
+                logger.error(
+                    f"🛑 {ccy} 止损触发: 未实现亏损 ${upl:.2f} > "
+                    f"阈值 ${stop_threshold:.0f} (资本的 {config.COIN_STOP_LOSS_PCT:.0%})"
+                )
+                send_tg(f"🛑 {ccy} 止损触发\n\n未实现亏损: ${upl:.2f}\n阈值: ${stop_threshold:.0f}\n操作: 市价平仓")
+                client.close_futures_position()
+                return True
+        else:
+            base_ccy = ccy.split("_")[0]  # "ETH" or "SOL" etc
+            pos = client.get_spot_position(base_ccy)
+            if not pos or pos <= 0:
+                return False
+            avg_cost = client.get_avg_cost(base_ccy)
+            ticker = client.get_ticker()
+            price = float(ticker.get("last", 0))
+            if not avg_cost or price <= 0:
+                return False
+            unrealized = (price - avg_cost) * pos
+            if unrealized < 0 and abs(unrealized) > stop_threshold:
+                logger.error(
+                    f"🛑 {ccy} 止损触发: 均价 ${avg_cost:.4f} 现价 ${price:.4f} "
+                    f"持仓 {pos:.4f} {base_ccy} 浮亏 ${unrealized:.2f} > "
+                    f"阈值 ${stop_threshold:.0f}"
+                )
+                send_tg(
+                    f"🛑 {ccy} 止损触发\n\n"
+                    f"均价: ${avg_cost:.4f}\n现价: ${price:.4f}\n"
+                    f"持仓: {pos:.4f} {base_ccy}\n浮亏: ${unrealized:.2f}\n"
+                    f"阈值: ${stop_threshold:.0f}\n操作: 限价卖出"
+                )
+                # 限价卖出全部
+                decimals = cc.get("size_decimals", 4)
+                min_sz = cc.get("min_order_size", 0.001)
+                sz = round(pos * 0.999, decimals)
+                if sz >= min_sz:
+                    client.place_order("sell", price, sz)
+                    logger.info(f"  ✅ 止损卖单已挂: {sz:.4f} {base_ccy} @ ${price:.4f}")
+                return True
+        return False
+    except Exception as e:
+        logger.debug(f"止损检查异常(非致命): {e}")
+        return False
+
+
 def run_coin(ccy: str, stop_event: threading.Event):
     coin_cfg = config.COIN_CONFIG[ccy]
     symbol          = coin_cfg["symbol"]
@@ -369,6 +431,11 @@ def run_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"🛡️ 保护模式: {guard_result['reason']} — 仓位×{_guard_cap_mult:.0%}")
         elif guard_mode == "warn":
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
+
+        # ── 单币种止损 ──────────────────────────────────
+        if _coin_stop_loss_check(ccy, client, logger):
+            stop_event.wait(CHECK_INTERVAL)
+            continue
 
         # ── 策略级熔断 ──────────────────────────────────
         # 检查本币所有策略，全封则跳过（活一个就继续）
@@ -865,6 +932,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"🛡️ 保护模式: {guard_result['reason']} — 仓位×{_guard_cap_mult:.0%}")
         elif guard_mode == "warn":
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
+
+        # ── 单币种止损（合约） ──────────────────────────
+        if _coin_stop_loss_check(ccy, client, logger):
+            stop_event.wait(CHECK_INTERVAL)
+            continue
 
         # ── 策略级熔断（合约） ──────────────────────────
         all_blocked = False

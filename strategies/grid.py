@@ -22,6 +22,8 @@ class GridStrategy:
         self.capital = capital
         self._size_dec = size_decimals
         self.symbol = symbol
+        # 币种标签，与 config.COIN_CONFIG 的键对应 ("TRX", "ETH", "SOL")
+        self._coin = symbol.split("-")[0] if symbol else ""
 
         self.grid_prices = []
         self.orders = {}        # price -> {order_id, side, size}
@@ -68,10 +70,27 @@ class GridStrategy:
         """初始化挂单：只挂当前价格以下的买单，卖单等买单成交后再补挂"""
         logger.info(f"启动网格，当前价格: {current_price}")
 
+        # ── 仓位上限检查 ──
+        buy_capped = False
+        if hasattr(self, '_coin') and self._coin:
+            cap_pct = config.POSITION_CAP_PCT.get(self._coin, 1.5)
+            pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+            try:
+                base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                qty = self.client.get_spot_position(base)
+                val = qty * (current_price or self._current_price or 0)
+                if val >= pos_cap_value * 0.7:
+                    buy_capped = True
+                    logger.warning(f"[仓位上限] {self._coin} 当前持仓 ${val:.0f} >= 上限 ${pos_cap_value:.0f}×70%，只卖不买")
+            except Exception:
+                pass
+
         placed = 0
         for price in self.grid_prices:
             if price >= current_price:
                 continue
+            if buy_capped:
+                continue  # 超过仓位上限，跳过买单
             if placed >= self._max_entries:
                 logger.info(f"[网格] 初始达到最大档位 {self._max_entries}，停止挂单")
                 break
@@ -151,11 +170,25 @@ class GridStrategy:
                         f"盈亏: +{pnl:.4f} USDT"
                     )
 
-                # 在下方一格补挂买单（SOL 限仓检查）
+                # 在下方一格补挂买单（仓位上限检查 + SOL 限仓检查）
                 active_buys = sum(1 for info in self.orders.values()
                                   if isinstance(info, dict) and info.get("side") == "buy")
                 held = len(self.pending_sells)
-                if idx > 0 and (active_buys + held) < self._max_entries:
+                
+                # 仓位市值上限检查
+                pos_capped = False
+                if self._coin:
+                    cap_pct = config.POSITION_CAP_PCT.get(self._coin, 1.5)
+                    pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+                    try:
+                        base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                        qty = self.client.get_spot_position(base)
+                        val = qty * filled_price
+                        pos_capped = val >= pos_cap_value * 0.7
+                    except Exception:
+                        pass
+                
+                if idx > 0 and (active_buys + held) < self._max_entries and not pos_capped:
                     buy_price = self.grid_prices[idx - 1]
                     try:
                         oid = self.client.place_order("buy", buy_price, filled_size)

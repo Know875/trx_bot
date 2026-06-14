@@ -252,6 +252,18 @@ class BaseAdaptiveStrategy:
             coin, grid_range, gc, indicators)
         capital = self.capital * self._grid_position_pct()
 
+        # ── 仓位上限检查：防止网格接飞刀无限累积 ──
+        is_swap = "_SWAP" in coin
+        cap_pct = config.SWAP_POSITION_CAP_PCT.get(coin, 0.5) if is_swap else config.POSITION_CAP_PCT.get(coin, 1.5)
+        pos_cap_value = cap_pct * config.COIN_CONFIG.get(coin, {}).get("initial_capital", 5000)
+        current_pos_value = self._get_position_value(coin)
+        buy_capped = current_pos_value >= pos_cap_value * 0.7  # 超过70%上限就停止买盘
+        if buy_capped:
+            logger.warning(
+                f"[仓位上限] {coin} 当前持仓 ${current_pos_value:.0f} >= "
+                f"上限 ${pos_cap_value:.0f}×70%，只卖不买"
+            )
+
         lower = mid * (1 - grid_range / 2)
         upper = mid * (1 + grid_range / 2)
 
@@ -279,6 +291,8 @@ class BaseAdaptiveStrategy:
 
         for price in self._grid_prices:
             if price < current_price:
+                if buy_capped:
+                    continue  # 超过仓位上限，跳过买单
                 size = self._calc_trade_size(per_level, price)
                 if size <= 0:
                     continue
@@ -311,6 +325,22 @@ class BaseAdaptiveStrategy:
                         f"卖单{len(self._sell_orders)}个({total_sell})")
         else:
             logger.error("[网格] 所有挂单失败，回到 IDLE")
+
+    def _get_position_value(self, coin: str) -> float:
+        """获取当前现货持仓市值（USD）"""
+        try:
+            base = coin.split("_")[0] if "_" in coin else coin  # "TRX_SWAP" → "TRX"
+            # 合约用保证金/未实现，现货用持仓×价格
+            if "_SWAP" in coin:
+                pos = self.client.get_futures_position()
+                if pos:
+                    return abs(float(pos.get("pos", 0))) * float(pos.get("markPx", 0))
+                return 0.0
+            qty = self.client.get_spot_position(base)
+            ticker = self.client.get_ticker()
+            return qty * float(ticker.get("last", 0))
+        except Exception:
+            return 0.0
 
     def _grid_position_pct(self):
         return config.TRX_GRID_POSITION_PCT
