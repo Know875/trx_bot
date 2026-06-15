@@ -248,7 +248,7 @@ class GridStrategy:
                     if buy_cost <= 0 and self._sell_only_mode:
                         try:
                             base = self._coin.split("_")[0] if "_" in self._coin else self._coin
-                            buy_cost = self.client.get_avg_cost(base) or filled_price
+                            buy_cost = self.client.get_avg_cost(self.symbol) or filled_price
                         except Exception:
                             buy_cost = filled_price
                     fee = filled_size * (buy_cost + filled_price) * config.SPOT_FEE_RATE
@@ -341,12 +341,12 @@ class GridStrategy:
                 if buy_cost <= 0:
                     try:
                         base = self._coin.split("_")[0] if "_" in self._coin else self._coin
-                        buy_cost = self.client.get_avg_cost(base) or market_price
+                        buy_cost = self.client.get_avg_cost(self.symbol) or market_price
                     except Exception:
                         buy_cost = market_price
                 self.client.place_order("sell", market_price, pos["size"], order_type="market")
-                fee = pos["size"] * (pos["buy_cost"] + market_price) * config.SPOT_FEE_RATE
-                pnl = pos["size"] * (market_price - pos["buy_cost"]) - fee
+                fee = pos["size"] * (buy_cost + market_price) * config.SPOT_FEE_RATE
+                pnl = pos["size"] * (market_price - buy_cost) - fee
                 total_pnl += pnl
                 logger.info(
                     f"[网格平仓] 卖出 {pos['size']} {self.symbol} @ {market_price:.4f} "

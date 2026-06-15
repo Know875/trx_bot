@@ -655,6 +655,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                     )
                                     strat.start(price)
                                     current_strategy = ("grid", strat)
+                                    _LAST_GRID_REBUILD[ccy] = now  # 防同tick内停滞检测触发
                                     logger.info(f"启动网格: {lower:.6f} ~ {upper:.6f}（仓位×{cap_mult:.0%})")
                                 except ValueError as e:
                                     logger.warning(f"网格初始化失败: {e}")
