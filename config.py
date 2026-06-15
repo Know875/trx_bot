@@ -245,4 +245,4 @@ SOL_FUTURES_MAX_GRID_ENTRIES = 3.0 # 合约网格最多同时持有 4 个买入�
 # ── 行情 ──────────────────────────────────────────────────────
 CANDLE_BAR   = "15m"
 CANDLE_LIMIT = 100
-grid_range_pct = 0.162  # was 0.046
+grid_range_pct = 0.122  # was 0.046

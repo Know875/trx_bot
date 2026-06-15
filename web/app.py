@@ -68,6 +68,10 @@ async def auth_middleware(request: Request, call_next):
     if path.startswith("/static") or path == "/ws" or path == "/":
         return await call_next(request)
 
+    # CORS 预检请求直接放行（浏览器在带 Authorization 等非简单请求头时必发 OPTIONS）
+    if method == "OPTIONS":
+        return await call_next(request)
+
     # GET 请求默认放行（只读监控），但 logs 路径需要认证（泄露策略信息）
     if method == "GET" and not path.startswith("/api/logs"):
         return await call_next(request)
