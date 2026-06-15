@@ -211,7 +211,7 @@ _orphan_alerted = {}       # 币种 -> 上次告警时间戳，避免重复刷�
 _ORPHAN_ALERT_COOLDOWN = 3600  # 最多每小时告警一次
 
 
-def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger):
+def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger, tracker=None):
     """现货币种：所有策略被封 + 仍有持仓 → 限价卖出清仓"""
     global _orphan_alerted
     try:
@@ -274,7 +274,7 @@ def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger):
         logger.debug(f"孤儿仓位检测异常(非致命): {e}")
 
 
-def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
+def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger, tracker=None):
     """合约币种：所有策略被封 + 仍有持仓 → 市价平仓"""
     global _orphan_alerted
     try:
@@ -295,8 +295,9 @@ def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
         if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
             return
 
+        upl = float(pos.get("upl", 0))
         logger.error(
-            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos_qty} 张合约持仓 — 自动平仓"
+            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos_qty} 张合约持仓(UPL={upl:+.4f}) — 自动平仓"
         )
         _orphan_alerted[ccy] = time.time()
 
@@ -304,13 +305,16 @@ def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
             f"🚨 孤儿仓位告警\n\n"
             f"币种: {ccy}\n"
             f"持仓: {pos_qty} 张合约\n"
+            f"未实现盈亏: {upl:+.4f} USDT\n"
             f"策略状态: 全部永久禁用\n"
             f"操作: 自动市价平仓"
         )
 
         try:
             client.close_futures_position()
-            logger.info(f"  ✅ 已平孤儿合约仓位: {pos_qty} 张")
+            if upl != 0 and tracker:
+                tracker.record(upl, "trx_adaptive_futures" if "TRX" in ccy else "futures", note="orphan_force_close")
+            logger.info(f"  ✅ 已平孤儿合约仓位: {pos_qty} 张 (UPL {upl:+.4f})")
         except Exception as e:
             logger.error(f"  ❌ 平孤儿合约仓位失败: {e}")
 
@@ -318,7 +322,7 @@ def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger):
         logger.debug(f"孤儿仓位检测异常(非致命): {e}")
 
 
-def _coin_stop_loss_check(ccy: str, client, logger) -> bool:
+def _coin_stop_loss_check(ccy: str, client, logger, tracker=None) -> bool:
     """单币种止损检查：未实现亏损 > STOP_LOSS_PCT × initial_capital → 强制退出
     返回 True 表示已触发止损并退出，False 表示正常"""
     try:
@@ -342,6 +346,8 @@ def _coin_stop_loss_check(ccy: str, client, logger) -> bool:
                 )
                 send_tg(f"🛑 {ccy} 止损触发\n\n未实现亏损: ${upl:.2f}\n阈值: ${stop_threshold:.0f}\n操作: 市价平仓")
                 client.close_futures_position()
+                if tracker:
+                    tracker.record(upl, "trx_adaptive_futures" if "TRX" in ccy else "futures", note="stop_loss")
                 return True
         else:
             base_ccy = ccy.split("_")[0]  # "ETH" or "SOL" etc
@@ -438,7 +444,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
         # ── 单币种止损 ──────────────────────────────────
-        if _coin_stop_loss_check(ccy, client, logger):
+        if _coin_stop_loss_check(ccy, client, logger, tracker=tracker):
             stop_event.wait(CHECK_INTERVAL)
             continue
 
@@ -907,8 +913,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         try:
             pos = client.get_futures_position()
             if pos and float(pos.get("pos", 0)) != 0:
-                logger.warning(f"[启动清理] 检测到 {ccy} 残留合约持仓，执行平仓（第{_attempt+1}次）")
+                upl = float(pos.get("upl", 0))
+                logger.warning(f"[启动清理] 检测到 {ccy} 残留合约持仓 UPL={upl:+.4f}，执行平仓（第{_attempt+1}次）")
                 client.close_futures_position()
+                if upl != 0:
+                    tracker.record(upl, "trx_adaptive_futures", note="startup_force_close")
                 logger.info(f"[启动清理] {ccy} 合约持仓已平")
             client.cancel_all_orders()
             client.cancel_algo_orders()
@@ -923,7 +932,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
     # TRX_SWAP 使用专属合约自适应策略
     is_trx_swap  = (ccy == "TRX_SWAP")
-    trx_swap_strat = TRXAdaptiveFuturesStrategy(client, initial_capital) if is_trx_swap else None
+    trx_swap_strat = TRXAdaptiveFuturesStrategy(client, initial_capital, tracker=tracker) if is_trx_swap else None
 
     current_strategy  = None
     current_regime    = None
@@ -957,7 +966,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
         # ── 单币种止损（合约） ──────────────────────────
-        if _coin_stop_loss_check(ccy, client, logger):
+        if _coin_stop_loss_check(ccy, client, logger, tracker=tracker):
             stop_event.wait(CHECK_INTERVAL)
             continue
 
@@ -975,7 +984,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         if all_blocked:
             logger.warning(f"⚠️ {ccy} 所有策略已熔断 — 跳过")
             # ── 孤儿仓位检测：合约策略全封仍有持仓 → 平仓退出 ──
-            _check_and_exit_orphan_swap(ccy, client, _sguard, logger)
+            _check_and_exit_orphan_swap(ccy, client, _sguard, logger, tracker=tracker)
             stop_event.wait(CHECK_INTERVAL)
             continue
 

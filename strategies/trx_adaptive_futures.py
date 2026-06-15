@@ -27,10 +27,11 @@ TREND_RUNNING  = "trend"
 class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
     """TRX 合约自适应策略：双边网格 + 做多做空趋势"""
 
-    def __init__(self, client, capital):
+    def __init__(self, client, capital, tracker=None):
         super().__init__(client, capital)
         self.coin = "TRX_SWAP"
         self._ct_val = None
+        self._tracker = tracker  # 用于记录大平仓PnL到tracker
         # 合约网格特有追踪
         self._pending_long  = []   # 现货版没有的多头待平仓列表
         self._pending_short = []   # 现货版没有的空头待平仓列表
@@ -193,6 +194,8 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
             for pos in pending_short:
                 total_pnl += self._calc_pnl(pos["size"], pos["entry_price"], price, "short")
             logger.info(f"[合约网格平仓] {len(pending_long)}多头 {len(pending_short)}空头 盈亏 {total_pnl:+.4f}")
+            if total_pnl != 0 and self._tracker:
+                self._tracker.record(total_pnl, "trx_adaptive_futures", note="force_close")
         except Exception as e:
             logger.error(f"[合约网格平仓] 失败: {e}")
         return total_pnl
