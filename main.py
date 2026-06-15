@@ -33,6 +33,7 @@ import volatility_adapter
 _macro = MacroIntelligence()
 GLOBAL_MACRO = {"risk_score": 0.5, "position_multiplier": 1.0}
 MACRO_CHECK_INTERVAL = 300  # 每5分钟更新宏观分析
+_LAST_GRID_REBUILD = {}  # ccy → timestamp: 网格重组时间（防停滞检测无限重启）
 
 def _update_macro():
     global GLOBAL_MACRO
@@ -580,26 +581,21 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
                     # 网格停滞检测：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6  # 超过6h无成交视为停滞
-                    if trx_strat and trx_strat.running and tracker.records:
+                    last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                    if trx_strat and trx_strat.running and (now - last_rebuild) > STAGNATION_HOURS * 3600:
                         try:
-                            last_time = tracker.records[-1].get("time", "")
-                            if last_time:
-                                from datetime import datetime as dt
-                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                stale_h = (now - last_ts) / 3600
-                                if stale_h > STAGNATION_HOURS:
-                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                    pnl = trx_strat.stop()
-                                    if pnl != 0:
-                                        tracker.record(pnl, "trx_adaptive")
-                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
-                                    if _sg_allowed and _guard_can_open:
-                                        trx_strat.start(new_regime, price,
-                                                        capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
-                                                        indicators=indicators)
-                                        # 记录重组时间戳，防止陷入无限重启循环
-                                        tracker.record(0, "trx_adaptive", note="grid_restart")
-                                        logger.info(f"🔧 {ccy} 网格重组完成")
+                            stale_h = (now - last_rebuild) / 3600
+                            logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                            pnl = trx_strat.stop()
+                            if pnl != 0:
+                                tracker.record(pnl, "trx_adaptive")
+                            _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
+                            if _sg_allowed and _guard_can_open:
+                                trx_strat.start(new_regime, price,
+                                                capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                indicators=indicators)
+                                _LAST_GRID_REBUILD[ccy] = now
+                                logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
                 else:
@@ -696,33 +692,30 @@ def run_coin(ccy: str, stop_event: threading.Event):
                         try:
                             name, strat = current_strategy
                             if name == "grid" and strat.running:
-                                last_time = tracker.records[-1].get("time", "")
-                                if last_time:
-                                    from datetime import datetime as dt
-                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                    stale_h = (now - last_ts) / 3600
-                                    if stale_h > STAGNATION_HOURS:
-                                        logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                        _pnl = strat.stop()
-                                        if _pnl:
-                                            tracker.record(_pnl, name)
-                                        _grid_allowed, _grid_mult = _strat_gate(ccy, "grid")
-                                        if _grid_allowed and _guard_can_open:
-                                            coin_base = ccy.split("-")[0]
-                                            gc = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
-                                            gr = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
-                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
-                                            lower, upper = get_range_bounds(df, gr)
-                                            new_strat = GridStrategy(
-                                                client=client, lower=lower, upper=upper,
-                                                grid_count=gc,
-                                                capital=initial_capital * _grid_mult * _guard_cap_mult * _ai_safety_mult,
-                                                size_decimals=size_dec, symbol=ccy,
-                                            )
-                                            new_strat.start(price)
-                                            current_strategy = ("grid", new_strat)
-                                            logger.info(f"🔧 {ccy} 网格重组完成")
-                                            tracker.record(0, "grid", note="grid_restart")
+                                last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                    stale_h = (now - last_rebuild) / 3600
+                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                    _pnl = strat.stop()
+                                    if _pnl:
+                                        tracker.record(_pnl, name)
+                                    _grid_allowed, _grid_mult = _strat_gate(ccy, "grid")
+                                    if _grid_allowed and _guard_can_open:
+                                        coin_base = ccy.split("-")[0]
+                                        gc = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
+                                        gr = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                        gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                        lower, upper = get_range_bounds(df, gr)
+                                        new_strat = GridStrategy(
+                                            client=client, lower=lower, upper=upper,
+                                            grid_count=gc,
+                                            capital=initial_capital * _grid_mult * _guard_cap_mult * _ai_safety_mult,
+                                            size_decimals=size_dec, symbol=ccy,
+                                        )
+                                        new_strat.start(price)
+                                        current_strategy = ("grid", new_strat)
+                                        _LAST_GRID_REBUILD[ccy] = now
+                                        logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
 
@@ -1070,25 +1063,22 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                     # 网格停滞检测（合约）：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6
-                    if trx_swap_strat and trx_swap_strat.running and tracker.records:
+                    if trx_swap_strat and trx_swap_strat.running:
                         try:
-                            last_time = tracker.records[-1].get("time", "")
-                            if last_time:
-                                from datetime import datetime as dt
-                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                stale_h = (now - last_ts) / 3600
-                                if stale_h > STAGNATION_HOURS:
-                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                    pnl = trx_swap_strat.stop()
-                                    if pnl != 0:
-                                        tracker.record(pnl, "trx_adaptive_futures")
-                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
-                                    if _sg_allowed and _guard_can_open:
-                                        trx_swap_strat.start(new_regime, price,
-                                                             capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
-                                                             indicators=indicators)
-                                        logger.info(f"🔧 {ccy} 网格重组完成")
-                                        tracker.record(0, "trx_adaptive_futures", note="grid_restart")
+                            last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                            if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                stale_h = (now - last_rebuild) / 3600
+                                logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                pnl = trx_swap_strat.stop()
+                                if pnl != 0:
+                                    tracker.record(pnl, "trx_adaptive_futures")
+                                _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
+                                if _sg_allowed and _guard_can_open:
+                                    trx_swap_strat.start(new_regime, price,
+                                                         capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                         indicators=indicators)
+                                    _LAST_GRID_REBUILD[ccy] = now
+                                    logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
                 else:
@@ -1186,37 +1176,34 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                     # 通用期货网格停滞检测（ETH_SWAP/SOL_SWAP）：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6
-                    if not is_trx_swap and current_strategy and tracker.records:
+                    if not is_trx_swap and current_strategy:
                         try:
                             name, strat = current_strategy
                             if name == "futures_grid" and strat.running:
-                                last_time = tracker.records[-1].get("time", "")
-                                if last_time:
-                                    from datetime import datetime as dt
-                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                    stale_h = (now - last_ts) / 3600
-                                    if stale_h > STAGNATION_HOURS:
-                                        logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
-                                        _pnl = strat.stop()
-                                        if _pnl:
-                                            tracker.record(_pnl, name)
-                                        _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
-                                        if _fb_allowed and _guard_can_open:
-                                            coin_base = ccy.split("-")[0]
-                                            gc = getattr(config, f"{coin_base}_GRID_COUNT", config.GRID_COUNT)
-                                            gr = getattr(config, f"{coin_base}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
-                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
-                                            lower, upper = get_range_bounds(df, gr)
-                                            new_strat = FuturesGridStrategy(
-                                                client=client, lower=lower, upper=upper,
-                                                grid_count=gc,
-                                                capital=initial_capital * _fb_mult * _guard_cap_mult * _ai_safety_mult,
-                                                symbol=ccy,
-                                            )
-                                            new_strat.start(price)
-                                            current_strategy = ("futures_grid", new_strat)
-                                            logger.info(f"🔧 {ccy} 合约网格重组完成")
-                                            tracker.record(0, "futures_grid", note="grid_restart")
+                                last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                    stale_h = (now - last_rebuild) / 3600
+                                    logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
+                                    _pnl = strat.stop()
+                                    if _pnl:
+                                        tracker.record(_pnl, name)
+                                    _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
+                                    if _fb_allowed and _guard_can_open:
+                                        coin_base = ccy.split("-")[0]
+                                        gc = getattr(config, f"{coin_base}_GRID_COUNT", config.GRID_COUNT)
+                                        gr = getattr(config, f"{coin_base}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                        gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                        lower, upper = get_range_bounds(df, gr)
+                                        new_strat = FuturesGridStrategy(
+                                            client=client, lower=lower, upper=upper,
+                                            grid_count=gc,
+                                            capital=initial_capital * _fb_mult * _guard_cap_mult * _ai_safety_mult,
+                                            symbol=ccy,
+                                        )
+                                        new_strat.start(price)
+                                        current_strategy = ("futures_grid", new_strat)
+                                        _LAST_GRID_REBUILD[ccy] = now
+                                        logger.info(f"🔧 {ccy} 合约网格重组完成")
                         except Exception:
                             pass
 
