@@ -627,9 +627,31 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and not _grid_allowed:
                                 logger.info(f"⚠️ {ccy} 趋势+网格均受限（StrategyGuard），空仓等待")
                             elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and _grid_allowed:
+                                # 趋势禁用→回退到网格（内联网格启动逻辑，避免elif截断）
                                 logger.info(f"⚠️ {ccy} 趋势策略禁用，回退到网格管理持仓")
-                                # 重定向到网格启动代码（利用后续 elif new_regime == "ranging" 的网格逻辑）
-                                new_regime = "ranging"
+                                coin_base = ccy.split("-")[0]
+                                grid_count = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
+                                grid_range = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                grid_range, grid_count, _ = volatility_adapter.get_adapted_grid_params(
+                                    coin_base, grid_range, grid_count, indicators)
+                                m_adj = get_macro_adjustment(GLOBAL_MACRO)
+                                gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                grid_range *= gwide
+                                grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
+                                cap_mult = m_adj["position_multiplier"] * _grid_mult * _guard_cap_mult
+                                lower, upper = get_range_bounds(df, grid_range)
+                                try:
+                                    strat = GridStrategy(
+                                        client=client, lower=lower, upper=upper,
+                                        grid_count=grid_count,
+                                        capital=initial_capital * max(0.5, 0.9 * cap_mult) * _ai_safety_mult,
+                                        size_decimals=size_dec, symbol=ccy,
+                                    )
+                                    strat.start(price)
+                                    current_strategy = ("grid", strat)
+                                    logger.info(f"启动网格: {lower:.6f} ~ {upper:.6f}（仓位×{cap_mult:.0%})")
+                                except ValueError as e:
+                                    logger.warning(f"网格初始化失败: {e}")
                             elif not _guard_can_open:
                                 logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
                             elif new_regime == "ranging":
