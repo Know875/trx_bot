@@ -624,14 +624,15 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
                             if new_regime == "ranging" and not _grid_allowed:
                                 logger.info(f"⚠️ {ccy} 网格策略受限（StrategyGuard），空仓等待")
-                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed:
-                                logger.info(f"⚠️ {ccy} 趋势策略受限（StrategyGuard），空仓等待")
+                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and not _grid_allowed:
+                                logger.info(f"⚠️ {ccy} 趋势+网格均受限（StrategyGuard），空仓等待")
+                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and _grid_allowed:
+                                logger.info(f"⚠️ {ccy} 趋势策略禁用，回退到网格管理持仓")
+                                # 重定向到网格启动代码（利用后续 elif new_regime == "ranging" 的网格逻辑）
+                                new_regime = "ranging"
                             elif not _guard_can_open:
                                 logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
-                            elif new_regime == "ranging" or (new_regime in ("trending_up", "trending_down") and not _trend_allowed and _grid_allowed):
-                                # 区间震荡 → 网格；趋势策略禁用时也回退到网格（仓位上限只卖模式管理持仓）
-                                if new_regime != "ranging":
-                                    logger.info(f"⚠️ {ccy} 趋势策略禁用，回退到网格管理持仓")
+                            elif new_regime == "ranging":
                                 # 按币种读取网格参数（回测调优）
                                 coin_base = ccy.split("-")[0]
                                 grid_count = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
