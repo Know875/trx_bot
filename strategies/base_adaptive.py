@@ -319,6 +319,8 @@ class BaseAdaptiveStrategy:
 
         if self._buy_orders or self._sell_orders:
             self._state = GRID_RUNNING
+            self._grid_center = mid  # 记住锚点，用于漂移检测
+            self._grid_half_range = (upper - lower) / 2  # 记住原始半距
             tag = "死盘窄距" if self._is_dead_grid else ("亚洲高峰" if is_asia_peak() else "非高峰")
             logger.info(f"[网格] {tag} {lower:.6f}~{upper:.6f} 锚点{mid:.6f} "
                         f"买单{len(self._buy_orders)}个({total_buy}) "
@@ -369,17 +371,16 @@ class BaseAdaptiveStrategy:
             return pnl
 
         # ── 网格漂移检测 ──
-        if self._buy_orders or self._sell_orders:
-            grid_prices = list(self._buy_orders.keys()) + list(self._sell_orders.keys())
-            if grid_prices:
-                grid_center = (max(grid_prices) + min(grid_prices)) / 2
-                grid_range  = (max(grid_prices) - min(grid_prices)) / 2
-                drift = abs(current_price - grid_center) / grid_center
-                if drift > grid_range / grid_center * 1.5:
-                    logger.info(f"[网格] 价格漂移 {drift:.4%}，重新锚定")
-                    self._cancel_grid(current_price)
-                    self._start_grid(current_price, ind)
-                    return 0.0
+        stored_center = getattr(self, '_grid_center', None)
+        stored_half = getattr(self, '_grid_half_range', None)
+        if stored_center is not None and stored_half is not None and stored_half > 0:
+            drift = abs(current_price - stored_center) / stored_center
+            threshold = (stored_half / stored_center) * 1.5
+            if drift > threshold:
+                logger.info(f"[网格] 价格漂移 {drift:.4%} > {threshold:.4%}，重新锚定")
+                self._cancel_grid(current_price)
+                self._start_grid(current_price, ind)
+                return 0.0
 
         # ── 批量查询挂单 ──
         try:
