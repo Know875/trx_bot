@@ -7,6 +7,8 @@ import logging
 import threading
 import sys
 import os
+import json
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -520,15 +522,23 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 logger.info(tracker.summary())
 
                 # 同步策略贡献报表 + 账户守护者
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
                 for rec in tracker.records:
-                    key = f"spot_{ccy}:{rec['strategy']}:{rec.get('time','')}"
-                    if not hasattr(run_coin, f"_rep_{ccy}"):
-                        setattr(run_coin, f"_rep_{ccy}", set())
-                    reported = getattr(run_coin, f"_rep_{ccy}")
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('ts','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
                         reported.add(key)
+                # 原子写入reported集合
+                tmp = f"{_rep_file}.tmp"
+                with open(tmp, "w") as f:
+                    json.dump(list(reported), f)
+                os.replace(tmp, _rep_file)
 
                 # 风控
                 dd = tracker.drawdown()
@@ -1035,15 +1045,23 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 logger.info(tracker.summary())
 
                 # 同步策略贡献报表 + 账户守护者（合约）
+                # 同步策略贡献报表 + 账户守护者（swap）
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
                 for rec in tracker.records:
-                    key = f"swap_{ccy}:{rec['strategy']}:{rec.get('time','')}"
-                    if not hasattr(run_swap_coin, f"_rep_{ccy}"):
-                        setattr(run_swap_coin, f"_rep_{ccy}", set())
-                    reported = getattr(run_swap_coin, f"_rep_{ccy}")
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('ts','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
                         reported.add(key)
+                tmp = f"{_rep_file}.tmp"
+                with open(tmp, "w") as f:
+                    json.dump(list(reported), f)
+                os.replace(tmp, _rep_file)
 
                 dd = tracker.drawdown()
                 if dd >= config.MAX_DRAWDOWN_PCT:
