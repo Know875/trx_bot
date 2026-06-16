@@ -85,7 +85,9 @@ def _floating_pnl(ccy: str, client, is_futures: bool, price: float = 0.0) -> flo
         if price <= 0:
             price = float(client.get_ticker()["last"])
         return total * (price - avg)
-    except Exception:
+    except Exception as e:
+        import logging as _log_
+        _log_.getLogger("bot").debug(f"_floating_pnl({ccy}) 异常(非致命): {e}")
         return 0.0
 
 

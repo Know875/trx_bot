@@ -151,6 +151,7 @@ class CarryExecutor:
             # 第一腿：现货市价买入
             spot.place_order("buy", price, want_coins, order_type="market")
             # 轮询确认成交（最多 5s）
+            got = 0
             for _ in range(10):
                 time.sleep(0.5)
                 after = spot.get_spot_position(base)

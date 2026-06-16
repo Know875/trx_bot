@@ -144,8 +144,7 @@ SOL_SPOT_GRID_RANGE_PCT = 0.046
 SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
-SOL_GRID_RANGE_PCT      = 0.04
-SOL_SWAP_GRID_RANGE_PCT  = 0.046  # 新增: SOL合约网格, was fallback 0.04 → 0.046回测确认+2.422%
+SOL_GRID_RANGE_PCT      = 0.046  # was 0.04 → 0.046 回测确认 +2.422%
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025

@@ -403,7 +403,7 @@ def _auto_apply_param(coin: str, param: str, old_val: float, new_val: float,
             ]
             logger.info(f"  📏 扩展安全区间 {coin}.{param}: {eff} → {wisdom_entry['effective_range']}")
 
-    # 执行替换 — 统一走 safe_write_config
+    # 执行替换 — 必须走 safe_write_config（不允许绕过安全网）
     try:
         from evolution_lock import safe_write_config
         ok = safe_write_config(coin, param, new_val, source=f"ai_tuner.py",
@@ -411,19 +411,8 @@ def _auto_apply_param(coin: str, param: str, old_val: float, new_val: float,
         if not ok:
             return False, f"safe_write_config 拦截"
     except ImportError:
-        # 兼容: 如果 evolution_lock 未就绪，仍然直接写入
-        try:
-            with open(CONFIG_FILE, "r") as f:
-                content = f.read()
-            pattern = rf'^({var_name}\s*=\s*)([\d.]+)'
-            new_content = re.sub(pattern, rf'\g<1>{new_val}', content, flags=re.MULTILINE)
-            if new_content == content:
-                return False, f"未匹配到 {var_name}"
-            with open(CONFIG_FILE, "w") as f:
-                f.write(new_content)
-            setattr(config, var_name, new_val)
-        except Exception as e:
-            return False, f"写入失败: {e}"
+        logger.error(f"evolution_lock 模块缺失，拒绝安全写入 — 请检查环境")
+        return False, f"evolution_lock 缺失，参数写入已拒绝"
 
     # 登记到 brain 的回滚队列，让 72h 自动回滚安全网也能评估 ai_tuner 的改动
     # （否则 ai_tuner 改坏了参数，brain.check_rollback 不会自动退回）

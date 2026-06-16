@@ -243,4 +243,8 @@ class FuturesTrendStrategy:
             return pnl
         except Exception as e:
             logger.error(f"合约平仓失败: {e}")
+            # 平仓已尝试，清空状态避免下次tick误判仍有持仓二次平仓
+            self.position     = 0
+            self.pos_side     = None
+            self.entry_price  = 0.0
             return 0.0
