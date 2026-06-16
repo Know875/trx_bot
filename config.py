@@ -134,7 +134,7 @@ FUTURES_GRID_MAX_FLOAT_LOSS = {
 }
 
 # ── 各币种网格参数（180天回测调优）────────────────────────────
-ETH_SPOT_GRID_RANGE_PCT = 0.162
+ETH_SPOT_GRID_RANGE_PCT = 0.120  # was 0.162 → 0.120 回测提示收窄更贴近当前波动
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
@@ -145,6 +145,7 @@ SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
 SOL_GRID_RANGE_PCT      = 0.04
+SOL_SWAP_GRID_RANGE_PCT  = 0.046  # 新增: SOL合约网格, was fallback 0.04 → 0.046回测确认+2.422%
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025
@@ -161,9 +162,9 @@ SOL_TREND_RSI_OB      = 65
 SOL_TREND_RSI_OS      = 35
 
 # ── TRX 专属参数（基于 TRX 行为研究 + 180天回测）──────────
-TRX_GRID_COUNT          = 5  # was 3 → 5 防网格饱和停滞
+TRX_GRID_COUNT          = 8  # was 5 → 8 回测确认+3.397%
 TRX_GRID_COUNT_NON_PEAK = 9
-TRX_GRID_RANGE_PCT      = 0.05
+TRX_GRID_RANGE_PCT      = 0.079  # was 0.05 → 0.079 回测确认+6.469%
 TRX_NARROW_GRID_RANGE_PCT = 0.04  # was 0.02 → 避免死盘+波动率适配双重压缩导致间距过小
 TRX_GRID_MIN_PROFIT_PCT = 0.002
 TRX_GRID_POSITION_PCT   = 0.70

@@ -229,6 +229,18 @@ def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger, tracker=None):
         if not pos or pos <= 0 or price <= 0:
             return
 
+        # ── 粉尘检查：不足最小下单量直接跳过，不告警 ──
+        cc = config.COIN_CONFIG.get(ccy, {})
+        decimals = cc.get("size_decimals", 4)
+        min_sz = cc.get("min_order_size", 0.001)
+        import math
+        factor = 10 ** decimals
+        sz = math.floor(pos * 0.999 * factor) / factor
+        if sz < min_sz:
+            # 粉尘仓位：仅 INFO，不触发 ERROR 告警，不更新冷却计时
+            logger.info(f"  ℹ️  {ccy} 粉尘持仓 {pos:.6f} (< min {min_sz})，跳过孤儿清仓")
+            return
+
         pos_value = pos * price
         if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
             return  # 告警冷却中
@@ -255,16 +267,6 @@ def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger, tracker=None):
                 logger.info(f"  🧹 清除 {ccy} 残留 {len(pending)} 个挂单")
                 client.cancel_all_orders()
 
-            # 获取该币种的最小下单量和精度
-            cc = config.COIN_CONFIG.get(ccy, {})
-            decimals = cc.get("size_decimals", 4)
-            min_sz = cc.get("min_order_size", 0.001)
-            import math
-            factor = 10 ** decimals
-            sz = math.floor(pos * 0.999 * factor) / factor
-            if sz < min_sz:
-                logger.info(f"  ℹ️  {ccy} 残仓 {pos:.6f} 不足最小下单量 {min_sz}，跳过")
-                return
             client.place_order("sell", price, sz)
             logger.info(f"  ✅ 已挂孤儿仓位卖单: {sz:.4f} {ccy} @ ${price:.4f}")
         except Exception as e:
