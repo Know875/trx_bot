@@ -528,8 +528,12 @@ def run_coin(ccy: str, stop_event: threading.Event):
                         reported = set(json.load(f))
                 except:
                     reported = set()
+                today_str = str(datetime.now(timezone.utc).date())
                 for rec in tracker.records:
-                    key = f"{ccy}:{rec['strategy']}:{rec.get('ts','')}:{rec.get('pnl','')}"
+                    rec_date = str(rec.get('time', ''))[:10] if rec.get('time') else ''
+                    if rec_date and rec_date != today_str:
+                        continue  # 非当日记录不喂入 guard/reporter，防止污染日统计
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('time','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
@@ -1052,8 +1056,19 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                         reported = set(json.load(f))
                 except:
                     reported = set()
+                # 同步策略贡献报表 + 账户守护者（swap）
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
+                today_str = str(datetime.now(timezone.utc).date())
                 for rec in tracker.records:
-                    key = f"{ccy}:{rec['strategy']}:{rec.get('ts','')}:{rec.get('pnl','')}"
+                    rec_date = str(rec.get('time', ''))[:10] if rec.get('time') else ''
+                    if rec_date and rec_date != today_str:
+                        continue
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('time','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
