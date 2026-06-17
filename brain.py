@@ -14,7 +14,7 @@
   python brain.py status       # 查看进化状态
 """
 
-import json, os, sys, time, logging
+import json, os, re, sys, time, logging
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from pathlib import Path
@@ -106,10 +106,6 @@ def _load_existing_sweep() -> dict:
 def _optuna_findings(coin, current_params, ind):
     """用 Optuna 联合优化 width×levels，产出与离散扫参同构的 findings。
     返回 None 表示 Optuna 不可用（调用方回退离散扫参）；返回 [] 表示无显著提升。"""
-    try:
-        from optimize import optimize_grid, current_pnl
-    except ImportError:
-        return None
     res = optimize_grid(coin, ind=ind)
     if res is None:
         return None
@@ -564,7 +560,6 @@ def auto_tune(apply_safe=True):
 
 def _make_decisions(findings, model):
     """综合探索结果和行情模型，生成决策（含冷却检查）"""
-    from param_score import is_on_cooldown
 
     decisions = []
 
@@ -772,11 +767,6 @@ def check_rollback(apply_revert=True) -> list:
     评分 50-79 → 保留观察
     评分 ≥ 80 → 正式采纳
     """
-    from param_score import (
-        COIN_THRESHOLDS, score_param, calc_fee_ratio,
-        add_cooldown, is_on_cooldown, show_scores
-    )
-
     state = _load_state()
     queue = state.get("rollback_queue", [])
     if not queue:
@@ -1010,3 +1000,880 @@ if __name__ == "__main__":
         print(f"未知命令: {cmd}")
         print("用法: python brain.py [explore|regime|auto-tune|rollback|status]")
         sys.exit(1)
+
+
+# ========== merged from optimize.py ==========
+
+"""
+贝叶斯参数优化 — 用 Optuna 替代离散网格扫参。
+
+为什么更好：离散扫参只在固定网格点（如 width∈{0.01,0.02,...}）上试，
+Optuna(TPE) 在连续区间内智能采样，用更少的回测次数找到更优的 width×levels 组合，
+并且是「联合优化」（同时调宽度和层数），能抓住离散扫参漏掉的组合效应。
+
+安全设计：未安装 optuna 时自动回退到 backtesting.grid.sweep_grid_params（离散扫参），
+调用方拿到的返回结构一致，互不感知。纯回测，不碰实盘下单。
+
+用法：
+  from optimize import optimize_grid
+  res = optimize_grid("ETH", ind)          # ind 可省略（自动 load）
+  res["best_params"]  -> {"grid_width":.., "grid_levels":..}
+  res["top"]          -> [{grid_width,grid_levels,pnl_pct,win_rate,total_trades}, ...]
+  res["method"]       -> "optuna" | "sweep"
+"""
+_opt_logger = logging.getLogger("optimize")
+
+# 各币种搜索区间（width 价格比例 / levels 网格层数）
+GRID_RANGES = {
+    "TRX":      {"width": (0.01, 0.20), "levels": (2, 15)},
+    "ETH":      {"width": (0.02, 0.30), "levels": (2, 12)},
+    "SOL":      {"width": (0.01, 0.20), "levels": (2, 10)},
+    "TRX_SWAP": {"width": (0.01, 0.20), "levels": (2, 12)},
+    "ETH_SWAP": {"width": (0.02, 0.30), "levels": (2, 10)},
+    "SOL_SWAP": {"width": (0.01, 0.20), "levels": (2, 8)},
+}
+_DEFAULT_RANGE = {"width": (0.01, 0.20), "levels": (2, 12)}
+
+MIN_TRADES = 5   # 回测交易数低于此值视为不可信，给大惩罚（防过拟合到偶然组合）
+
+_TOP_KEYS = ("grid_width", "grid_levels", "pnl_pct", "win_rate", "total_trades")
+
+
+def _load_ind(coin: str, days: int = 180):
+    """按需加载 IndicatorPack（与 brain/ai_tuner 一致）。"""
+    try:
+        from backtesting.engine import load_from_cache, calc_indicators
+    except ImportError:
+        return None
+    base = coin.replace("_SWAP", "")
+    df = load_from_cache(base, "1h", days)
+    if df is None or len(df) < 200:
+        return None
+    return calc_indicators(df)
+
+
+def _score(r: dict) -> float:
+    """目标值：PnL%，但交易过少 → 大惩罚（避免优化到偶然的高收益组合）。"""
+    if not r:
+        return -1e9
+    if r.get("total_trades", 0) < MIN_TRADES:
+        return -100.0
+    return float(r.get("pnl_pct", -1e9))
+
+
+def _slim(r: dict) -> dict:
+    return {k: r.get(k) for k in _TOP_KEYS}
+
+
+def optimize_grid(coin: str, ind=None, n_trials: int = 60, days: int = 180,
+                  top_n: int = 5) -> dict | None:
+    """对单个币种的网格参数(width×levels)做贝叶斯优化。
+    返回 None 表示无回测数据。"""
+    if ind is None:
+        ind = _load_ind(coin, days)
+    if ind is None:
+        return None
+
+    from backtesting.grid import simulate_grid
+    rng = GRID_RANGES.get(coin, _DEFAULT_RANGE)
+    w_lo, w_hi = rng["width"]
+    l_lo, l_hi = rng["levels"]
+
+    # ── Optuna 路径 ──
+    try:
+        import optuna
+        optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+        def objective(trial):
+            w = trial.suggest_float("grid_width", w_lo, w_hi)
+            lv = trial.suggest_int("grid_levels", l_lo, l_hi)
+            r = simulate_grid(ind, grid_width=w, grid_levels=lv)
+            trial.set_user_attr("r", _slim(r) if r else {})
+            return _score(r)
+
+        study = optuna.create_study(
+            direction="maximize",
+            sampler=optuna.samplers.TPESampler(seed=42),
+        )
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+        done = [t for t in study.trials if t.value is not None and t.user_attrs.get("r")]
+        done.sort(key=lambda t: t.value, reverse=True)
+        top = [t.user_attrs["r"] for t in done[:top_n]]
+        best = top[0] if top else {}
+        return {
+            "method": "optuna",
+            "coin": coin,
+            "n_trials": len(done),
+            "best_params": {
+                "grid_width": best.get("grid_width"),
+                "grid_levels": best.get("grid_levels"),
+            },
+            "best_value": best.get("pnl_pct", -1e9),
+            "top": top,
+        }
+    except ImportError:
+        pass  # 回退离散扫参
+
+    # ── 回退：离散扫参 ──
+    from backtesting.grid import sweep_grid_params
+    results = sweep_grid_params(ind, coin)
+    if not results:
+        return None
+    top = [_slim(r) for r in results[:top_n]]
+    best = top[0]
+    return {
+        "method": "sweep",
+        "coin": coin,
+        "n_trials": len(results),
+        "best_params": {
+            "grid_width": best.get("grid_width"),
+            "grid_levels": best.get("grid_levels"),
+        },
+        "best_value": best.get("pnl_pct", -1e9),
+        "top": top,
+    }
+
+
+def current_pnl(coin: str, width: float, levels: int, ind=None, days: int = 180) -> float:
+    """当前配置在同一份数据上的回测 PnL%（用于和优化结果对比）。"""
+    if ind is None:
+        ind = _load_ind(coin, days)
+    if ind is None:
+        return 0.0
+    from backtesting.grid import simulate_grid
+    try:
+        r = simulate_grid(ind, grid_width=float(width), grid_levels=int(levels))
+        return float(r.get("pnl_pct", 0.0)) if r else 0.0
+    except Exception:
+        return 0.0
+
+
+# ═══════════════════════════════════════════════════════════════
+# Walk-forward 验证 — 把"换时段也成立"写成代码
+# ═══════════════════════════════════════════════════════════════
+
+def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
+                          n_trials: int = 30, days: int = 180) -> dict | None:
+    """
+    滚动窗口优化 + 样本外验证。
+
+    不再"全段找最优"：
+      1. 把 180 天切成 window_days 长的窗口（30d 一窗）
+      2. 在窗口 N 上优化，在 N+1（没见过的数据）上验证
+      3. 只推荐所有窗口上样本外也赚钱的参数
+
+    返回:
+      - oos_pnl_pct:     样本外平均 PnL%（真正有参考价值）
+      - in_sample_pnl_pct: 样本内平均 PnL%（仅供参考，偏高）
+      - oos_positive:    样本外盈利窗口比例
+      - stable_params:   多窗口都选中的稳健参数
+      - per_window:      每窗详情
+    """
+    if ind is None:
+        ind = _load_ind(coin, days)
+    if ind is None:
+        return None
+
+    from backtesting.grid import simulate_grid
+    n = len(ind.close)
+    window_bars = int(window_days * 96)  # 15min bars → ~96 per day
+
+    if n < window_bars * 3:
+        # fallback: 用更小的窗口
+        window_bars = n // 3
+        _opt_logger.info(f"{coin}: 数据不足 ({n} bars)，自动缩小窗口到 {window_bars} bars")
+    if n < 180:  # 最少需要 3 小时数据
+        _opt_logger.warning(f"{coin}: 数据不足（{n} bars），至少需要 180")
+        return None
+
+    rng = GRID_RANGES.get(coin, _DEFAULT_RANGE)
+    w_lo, w_hi = rng["width"]
+    l_lo, l_hi = rng["levels"]
+
+    per_window = []
+    oos_scores = []
+    in_sample_scores = []
+    param_votes = []  # 每窗的最佳参数
+
+    step = window_bars // 2  # 半窗步长 → 窗口有重叠
+
+    # 检测 optuna 是否可用（一次）并静默日志
+    try:
+        import optuna as _optuna_mod
+        _optuna_mod.logging.set_verbosity(_optuna_mod.logging.WARNING)
+        _optuna_available = True
+    except ImportError:
+        _optuna_available = False
+
+    for start in range(0, n - window_bars * 2, step):
+        train_end = start + window_bars
+        test_end = min(train_end + window_bars, n)
+
+        if test_end - train_end < window_bars // 2 or train_end - start < 60:
+            continue
+
+        # 切分样本内 / 样本外
+        train_ind = _slice_ind(ind, start, train_end)
+        test_ind = _slice_ind(ind, train_end, test_end)
+
+        # ── 在 train 上优化 ──
+        try:
+            if not _optuna_available:
+                raise ImportError
+
+            def objective(trial):
+                w = trial.suggest_float("grid_width", w_lo, w_hi)
+                lv = trial.suggest_int("grid_levels", l_lo, l_hi)
+                r = simulate_grid(train_ind, grid_width=w, grid_levels=lv)
+                return _score(r)
+
+            study = _optuna_mod.create_study(
+                direction="maximize",
+                sampler=_optuna_mod.samplers.TPESampler(seed=start),
+            )
+            study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+            best_params = {
+                "grid_width": study.best_params.get("grid_width"),
+                "grid_levels": study.best_params.get("grid_levels"),
+            }
+            is_pnl = study.best_value or 0
+        except ImportError:
+            # 回退：离散扫参
+            from backtesting.grid import sweep_grid_params
+            results = sweep_grid_params(train_ind, coin)
+            if not results:
+                continue
+            best = results[0]
+            best_params = {"grid_width": best["grid_width"], "grid_levels": best["grid_levels"]}
+            is_pnl = best.get("pnl_pct", -1e9)
+
+        # ── 在 test 上验证（样本外）──
+        test_r = simulate_grid(
+            test_ind,
+            grid_width=best_params["grid_width"],
+            grid_levels=int(best_params.get("grid_levels", 3)),
+        )
+        oos_pnl = test_r.get("pnl_pct", 0) if test_r else 0
+
+        if oos_pnl > 0:
+            oos_scores.append(oos_pnl)
+        in_sample_scores.append(max(0, is_pnl))
+
+        per_window.append({
+            "train_range": f"bar[{start}:{train_end}]",
+            "test_range": f"bar[{train_end}:{test_end}]",
+            "best_params": best_params,
+            "in_sample_pnl": round(is_pnl, 2),
+            "oos_pnl": round(oos_pnl, 2),
+            "oos_pass": oos_pnl > 0,
+        })
+        param_votes.append((best_params["grid_width"], best_params["grid_levels"], oos_pnl))
+
+    if not per_window:
+        return None
+
+    # ── 统计 ──
+    passed = sum(1 for w in per_window if w["oos_pass"])
+    avg_ins = sum(in_sample_scores) / len(in_sample_scores)
+    avg_oos = sum(oos_scores) / len(oos_scores) if oos_scores else 0
+
+    # ── 稳健参数：多窗口都靠谱的 ──
+    stable_best_count = 0
+    if param_votes:
+        # 按样本外 PnL 加权投票
+        stable_count = {}
+        for w, lv, oos in param_votes:
+            key = (w, lv)
+            stable_count[key] = stable_count.get(key, 0) + (1 if oos > 0 else 0)
+        best_key = max(stable_count, key=stable_count.get)
+        stable_params = {"grid_width": best_key[0], "grid_levels": best_key[1]}
+        stable_best_count = stable_count[best_key]
+    else:
+        stable_params = per_window[0]["best_params"] if per_window else {}
+
+    return {
+        "method": "walk_forward",
+        "coin": coin,
+        "windows": len(per_window),
+        "oos_positive": passed,
+        "in_sample_pnl_pct": round(avg_ins, 2),
+        "oos_pnl_pct": round(avg_oos, 2),
+        "recommend": avg_oos > 0,  # 样本外真赚钱才推荐
+        "stable_params": stable_params,
+        "stable_count": stable_best_count,
+        "per_window": per_window,
+    }
+
+
+def _slice_ind(ind, start: int, end: int):
+    """切出 IndicatorPack 的 [start:end) 子集"""
+    import copy
+    sliced = copy.copy(ind)
+    for attr in ("close", "high", "low", "vol", "ema20", "ema60",
+                 "bb_upper", "bb_lower", "bb_width", "atr", "rsi", "adx"):
+        arr = getattr(ind, attr, None)
+        if arr is not None and len(arr) >= end:
+            setattr(sliced, attr, arr[start:end])
+    if ind.regimes and len(ind.regimes) >= end:
+        sliced.regimes = ind.regimes[start:end]
+    return sliced
+
+
+# ═══════════════════════════════════════════════════════════════
+# 邻域稳定性评分 — 不取尖点，取稳健平台区
+# ═══════════════════════════════════════════════════════════════
+
+def stability_score(coin: str, width: float, levels: int, ind=None, days: int = 180) -> dict:
+    """
+    检查 (width, levels) 周围邻居的表现。
+
+    不是取最高 PnL 的单个点（可能是噪声尖峰），
+    而是取"周围邻居也都不错"的平台区中心。
+
+    返回:
+      - center_pnl:    中心点 PnL%
+      - neighbor_avg:   邻居平均 PnL%
+      - neighbor_min:   邻居最低 PnL%（如果这个都很高 → 真平台）
+      - neighbor_var:   邻居 PnL 方差（越小越稳）
+      - stable:         是否推荐（neighbor_avg > 0 且 min > -5%）
+    """
+    if ind is None:
+        ind = _load_ind(coin, days)
+    if ind is None:
+        return {"error": "no data"}
+
+    from backtesting.grid import simulate_grid
+
+    # 中心点
+    center_r = simulate_grid(ind, grid_width=width, grid_levels=levels)
+    center_pnl = center_r.get("pnl_pct", -1e9) if center_r else -1e9
+
+    # 邻居：width ± 15%, levels ± 1
+    offsets = []
+    for w_mult in [0.85, 1.0, 1.15]:
+        for lv_delta in [-1, 0, 1]:
+            if w_mult == 1.0 and lv_delta == 0:
+                continue
+            w = width * w_mult
+            lv = max(2, levels + lv_delta)
+            offsets.append((w, lv))
+
+    neighbor_pnls = []
+    for w, lv in offsets:
+        r = simulate_grid(ind, grid_width=w, grid_levels=lv)
+        pnl = r.get("pnl_pct", -1e9) if r else -1e9
+        neighbor_pnls.append(pnl)
+
+    avg = sum(neighbor_pnls) / len(neighbor_pnls) if neighbor_pnls else -1e9
+    mn = min(neighbor_pnls) if neighbor_pnls else -1e9
+    var = sum((x - avg) ** 2 for x in neighbor_pnls) / len(neighbor_pnls)
+
+    stable = avg > 0 and mn > -5.0  # 邻居平均盈利且最差的也不崩
+
+    return {
+        "center_pnl": round(center_pnl, 2),
+        "neighbor_avg": round(avg, 2),
+        "neighbor_min": round(mn, 2),
+        "neighbor_var": round(var, 2),
+        "neighbor_count": len(neighbor_pnls),
+        "stable": stable,
+        "verdict": "✅ 稳健平台" if stable else ("⚠️ 尖峰/边缘" if center_pnl > avg * 1.5 else "❌ 不稳定"),
+    }
+
+
+def _cli_optimize():
+    import sys
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+    coins = sys.argv[1:] or list(GRID_RANGES)
+    for c in coins:
+        res = optimize_grid(c)
+        if not res:
+            print(f"【{c}】无回测数据")
+            continue
+        bp = res["best_params"]
+        print(f"\n【{c}】方法={res['method']} 试验={res['n_trials']} "
+              f"最优 width={bp['grid_width']} levels={bp['grid_levels']} → PnL={res['best_value']:+.2f}%")
+        for i, t in enumerate(res["top"], 1):
+            print(f"  #{i}: w={t['grid_width']:.3f} lv={t['grid_levels']} "
+                  f"→ PnL={t['pnl_pct']:+.2f}% 胜率={t['win_rate']:.0f}% ({t['total_trades']}笔)")
+
+
+# ========== merged from param_score.py ==========
+
+"""
+参数评分引擎 — 替代简单二元回滚，用多维指标打分
+
+五个评估维度:
+  ① 净PnL         ② PnL%         ③ 最大回撤
+  ④ 手续费吞噬率   ⑤ 相对baseline优势
+
+评分等级:
+  score ≥ 80 → promote (正式采纳)
+  score 50-79 → keep  (保留观察)
+  score 20-49 → downgrade (降级/警告)
+  score < 20  → rollback (强制回滚)
+"""
+
+SCORE_FILE = str(ROOT / "param_scores.json")
+_score_logger = logging.getLogger("param_score")
+
+# ═══════════════════════════════════════════════════════════
+# ① 分币种回滚阈值
+# ═══════════════════════════════════════════════════════════
+
+COIN_THRESHOLDS = {
+    # coin: {pnl_dollar, pnl_pct, fee_ratio_warn, fee_ratio_fatal, drawdown_max}
+    "TRX":      {"pnl_dollar": -1.0, "pnl_pct": -1.2, "fee_warn": 0.30, "fee_fatal": 0.50, "dd_max": 8},
+    "ETH":      {"pnl_dollar": -3.0, "pnl_pct": -2.0, "fee_warn": 0.35, "fee_fatal": 0.55, "dd_max": 12},
+    "SOL":      {"pnl_dollar": -2.0, "pnl_pct": -2.5, "fee_warn": 0.40, "fee_fatal": 0.60, "dd_max": 15},
+    "TRX_SWAP": {"pnl_dollar": -1.5, "pnl_pct": -1.0, "fee_warn": 0.25, "fee_fatal": 0.45, "dd_max": 6},
+    "ETH_SWAP": {"pnl_dollar": -2.5, "pnl_pct": -1.5, "fee_warn": 0.30, "fee_fatal": 0.50, "dd_max": 10},
+    "SOL_SWAP": {"pnl_dollar": -2.0, "pnl_pct": -2.0, "fee_warn": 0.35, "fee_fatal": 0.55, "dd_max": 12},
+}
+
+# 极端行情暂停阈值
+# 注意：is_extreme_market 实际比较的是 ticker 的 open24h（24 小时涨跌），故键名用 24h。
+EXTREME_THRESHOLDS = {
+    "btc_24h_drop_pct": -3.0,
+    "eth_24h_drop_pct": -4.0,
+    "funding_extreme_abs": 0.0005,   # 费率绝对值 > 0.05%
+}
+
+# 回滚冷却期
+ROLLBACK_COOLDOWN_DAYS = 7
+# 冷却期内如果新回测收益超过 baseline 30% 可以破例
+COOLDOWN_OVERRIDE_MULTIPLIER = 1.30
+
+# ═══════════════════════════════════════════════════════════
+# ② 手续费吞噬率计算
+# ═══════════════════════════════════════════════════════════
+
+def calc_fee_ratio(coin: str, since_iso: str = None) -> dict:
+    """
+    从日志计算手续费 / 毛利润 比例。
+    返回 {gross_pnl, total_fees, fee_ratio, total_trades}
+    """
+    log_file = ROOT / f"bot_{coin}.log"
+    if not log_file.exists():
+        return {"gross_pnl": 0, "total_fees": 0, "fee_ratio": 0, "total_trades": 0}
+
+    gross_pnl = 0.0  # 成交价差利润（不算手续费）
+    total_fees = 0.0
+    trade_count = 0
+
+    since_dt = None
+    if since_iso:
+        from datetime import datetime, timedelta
+        since_dt = datetime.fromisoformat(since_iso.replace("Z", "+00:00"))
+        since_local = (since_dt + timedelta(hours=8)).replace(tzinfo=None)
+
+    last_ts = None
+    try:
+        with open(log_file) as f:
+            for line in f:
+                try:
+                    last_ts = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    pass
+
+                if since_dt and last_ts and last_ts < since_local:
+                    continue
+
+                # 匹配手续费: "fee=0.0123" "手续费: 0.045" "taker_fee: 0.02"
+                m = re.search(r'(?:fee|手续费|taker_fee|maker_fee)\s*[:=]\s*([\d.]+)', line, re.IGNORECASE)
+                if m:
+                    total_fees += float(m.group(1))
+
+                # 匹配毛利润: "grid_profit=0.5" "trend_profit=-1.2" "settle: +1.5"
+                m = re.search(r'(?:grid_profit|trend_profit|pnl_delta)\s*[:=]\s*([+-]?[\d.]+)', line)
+                if m:
+                    gross_pnl += float(m.group(1))
+                    trade_count += 1
+
+                # 网格结算: "settled +0.5 USDT"
+                m = re.search(r'settled?\s*:\s*([+-][\d.]+)', line)
+                if m:
+                    gross_pnl += float(m.group(1))
+                    trade_count += 1
+
+    except Exception as e:
+        return {"gross_pnl": gross_pnl, "total_fees": total_fees, "fee_ratio": 0, "total_trades": trade_count, "error": str(e)}
+
+    fee_ratio = total_fees / gross_pnl if gross_pnl > 0 else (1.0 if total_fees > 0 else 0)
+
+    return {
+        "gross_pnl": round(gross_pnl, 3),
+        "total_fees": round(total_fees, 4),
+        "fee_ratio": round(fee_ratio, 3),
+        "total_trades": trade_count,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
+# ③ 极端行情检测
+# ═══════════════════════════════════════════════════════════
+
+def is_extreme_market() -> dict:
+    """检测是否处于极端行情，返回 {is_extreme, reasons}"""
+    import httpx
+    reasons = []
+    is_extreme = False
+
+    try:
+        client = httpx.Client(timeout=10)
+
+        # BTC ticker
+        r = client.get("https://www.okx.com/api/v5/market/ticker", params={"instId": "BTC-USDT"})
+        if r.status_code == 200:
+            data = r.json()
+            item = data.get("data", [{}])[0]
+            price = float(item.get("last", 0))
+            open24 = float(item.get("open24h", 0))
+            if open24 > 0:
+                change_pct = (price - open24) / open24 * 100
+                if change_pct < EXTREME_THRESHOLDS["btc_24h_drop_pct"]:
+                    is_extreme = True
+                    reasons.append(f"BTC 24h 跌幅 {change_pct:.1f}% > 阈值 {EXTREME_THRESHOLDS['btc_24h_drop_pct']}%")
+
+        # BTC 资金费率
+        r = client.get("https://www.okx.com/api/v5/public/funding-rate", params={"instId": "BTC-USDT-SWAP"})
+        if r.status_code == 200:
+            data = r.json()
+            item = data.get("data", [{}])[0]
+            fr = float(item.get("fundingRate", 0))
+            if abs(fr) > EXTREME_THRESHOLDS["funding_extreme_abs"]:
+                is_extreme = True
+                reasons.append(f"资金费率极端 {fr:.4%}")
+
+        # ETH ticker
+        r = client.get("https://www.okx.com/api/v5/market/ticker", params={"instId": "ETH-USDT"})
+        if r.status_code == 200:
+            data = r.json()
+            item = data.get("data", [{}])[0]
+            price = float(item.get("last", 0))
+            open24 = float(item.get("open24h", 0))
+            if open24 > 0:
+                change_pct = (price - open24) / open24 * 100
+                if change_pct < EXTREME_THRESHOLDS["eth_24h_drop_pct"]:
+                    is_extreme = True
+                    reasons.append(f"ETH 24h 跌幅 {change_pct:.1f}% > 阈值 {EXTREME_THRESHOLDS['eth_24h_drop_pct']}%")
+
+        client.close()
+    except Exception as e:
+        _score_logger.warning(f"极端行情检测失败: {e}")
+
+    return {"is_extreme": is_extreme, "reasons": reasons}
+
+
+# ═══════════════════════════════════════════════════════════
+# ④ 参数冷却/黑名单
+# ═══════════════════════════════════════════════════════════
+
+def _load_scores():
+    if os.path.exists(SCORE_FILE):
+        with open(SCORE_FILE) as f:
+            return json.load(f)
+    return {"scores": [], "cooldown": {}, "history": []}
+
+
+def _save_scores(data):
+    # 原子写入：先写临时文件再 rename，防止中途 kill 导致文件损坏
+    tmp = SCORE_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False, default=str)
+    os.replace(tmp, SCORE_FILE)
+
+
+def is_on_cooldown(coin: str, param: str, value) -> dict:
+    """
+    检查参数是否在冷却期。
+    返回 {on_cooldown, can_override, reason}
+    """
+    scores = _load_scores()
+    key = f"{coin}.{param}.{value}"
+    cooldown = scores.get("cooldown", {}).get(key)
+
+    if not cooldown:
+        return {"on_cooldown": False, "can_override": False, "reason": ""}
+
+    rolled_at = datetime.fromisoformat(cooldown["rolled_at"].replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+    days = (now - rolled_at).total_seconds() / 86400
+
+    if days >= ROLLBACK_COOLDOWN_DAYS:
+        # 冷却期结束
+        del scores["cooldown"][key]
+        _save_scores(scores)
+        return {"on_cooldown": False, "can_override": False, "reason": ""}
+
+    can_override = cooldown.get("override_allowed", False)
+    remaining = round(ROLLBACK_COOLDOWN_DAYS - days, 1)
+
+    return {
+        "on_cooldown": True,
+        "can_override": can_override,
+        "reason": f"冷却期剩余 {remaining} 天 (回滚於 {cooldown['rolled_at'][:10]})",
+        "rolled_at": cooldown["rolled_at"],
+        "rollback_reason": cooldown.get("reason", ""),
+    }
+
+
+def add_cooldown(coin: str, param: str, value, rollback_reason=""):
+    """将参数加入冷却黑名单"""
+    scores = _load_scores()
+    key = f"{coin}.{param}.{value}"
+    scores.setdefault("cooldown", {})[key] = {
+        "rolled_at": datetime.now(timezone.utc).isoformat(),
+        "reason": rollback_reason,
+    }
+    _save_scores(scores)
+    _score_logger.info(f"  🚫 {key} 冷藏 {ROLLBACK_COOLDOWN_DAYS} 天")
+
+
+# ═══════════════════════════════════════════════════════════
+# ⑤ 多维参数评分
+# ═══════════════════════════════════════════════════════════
+
+def score_param(
+    coin: str,
+    param: str,
+    current_value,
+    new_value,
+    current_pnl: float,
+    new_pnl: float,
+    current_dd: float = 0,
+    new_dd: float = 0,
+    current_fee_ratio: float = 0,
+    new_fee_ratio: float = 0,
+    win_rate: float = 50,
+    backtest_baseline_pnl: float = 0,
+) -> dict:
+    """
+    多维评分引擎。
+
+    满分 100 分，扣除项:
+      - PnL 绝对亏损
+      - PnL% 亏损
+      - 最大回撤
+      - 手续费占比过高
+      - 相对 baseline 不优
+    """
+
+    thresholds = COIN_THRESHOLDS.get(coin, COIN_THRESHOLDS["ETH"])
+    score = 60.0  # 起评分
+
+    # ── PnL 维度 (0-25分) ──
+    if new_pnl >= 0:
+        score += 20
+    elif new_pnl > thresholds["pnl_dollar"]:
+        score += 10  # 亏损但未超阈值
+    else:
+        score += max(-15, new_pnl * 2)  # 严重亏损扣分
+
+    # ── PnL% 维度 (0-15分) ──
+    # 根据币种实际本金估算 PnL%
+    base_capitals = {"TRX": 50, "ETH": 3000, "SOL": 4000, "TRX_SWAP": 60, "ETH_SWAP": 120, "SOL_SWAP": 40}
+    cap = base_capitals.get(coin, 50)
+    pnl_pct = new_pnl / cap * 100 if cap > 0 else 0
+
+    if pnl_pct > 0:
+        score += 15
+    elif pnl_pct > thresholds["pnl_pct"]:
+        score += 5
+    else:
+        score += max(-15, pnl_pct * 3)
+
+    # ── 回撤惩罚 (0 to -20) ──
+    if new_dd > thresholds["dd_max"] * 1.5:
+        score -= 20
+    elif new_dd > thresholds["dd_max"]:
+        score -= 10
+
+    # ── 手续费吞噬惩罚 (0 to -20) ──
+    if new_fee_ratio > thresholds["fee_fatal"]:
+        score -= 20
+    elif new_fee_ratio > thresholds["fee_warn"]:
+        score -= 10
+
+    # ── 相对 baseline 优势 (-15 to +15) ──
+    # 核心问题: 新参数有没有比旧参数更好？
+    if backtest_baseline_pnl:
+        improvement = new_pnl - current_pnl
+        pct_improvement = (improvement / abs(backtest_baseline_pnl)) * 100 if backtest_baseline_pnl else 0
+        if improvement > 0 and pct_improvement > 1:
+            score += 15
+        elif improvement > 0:
+            score += 5
+        elif improvement < -5:
+            score -= 15
+        elif improvement < 0:
+            score -= 5
+    else:
+        # 无 baseline，看绝对表现
+        if new_pnl > current_pnl * 1.1:
+            score += 5
+
+    # ── 胜率调整 (-5 to +5) ──
+    if win_rate > 70:
+        score += 5
+    elif win_rate < 40:
+        score -= 5
+
+    # 钳制
+    score = max(0, min(100, round(score, 1)))
+
+    # ── 评级 ──
+    if score >= 80:
+        grade = "promote"
+        action = "✅ 正式采纳"
+    elif score >= 50:
+        grade = "keep"
+        action = "👀 保留观察"
+    elif score >= 20:
+        grade = "downgrade"
+        action = "⚠️ 降级警告"
+    else:
+        grade = "rollback"
+        action = "🔄 强制回滚"
+
+    # 检查冷却期
+    cooldown = is_on_cooldown(coin, param, new_value)
+    if cooldown["on_cooldown"] and grade in ("promote", "keep", "downgrade") and not cooldown["can_override"]:
+        grade = "cooldown_blocked"
+        action = f"🚫 冷却期阻止 ({cooldown['reason']})"
+
+    return {
+        "score": score,
+        "grade": grade,
+        "action": action,
+        "coin": coin,
+        "param": param,
+        "current_value": current_value,
+        "new_value": new_value,
+        "details": {
+            "pnl_delta": round(new_pnl - current_pnl, 3),
+            "pnl_pct": round(pnl_pct, 2),
+            "fee_ratio": round(new_fee_ratio, 3),
+            "drawdown_pct": round(new_dd, 2),
+            "win_rate": round(win_rate, 1),
+            "vs_baseline": round((new_pnl - current_pnl), 3),
+        },
+        "cooldown": cooldown,
+    }
+
+
+def score_from_finding(finding: dict, pnl_info: dict = None, fee_info: dict = None) -> dict:
+    """从 explore 的 finding + 实测 pnl/fee 数据生成评分"""
+    coin = finding["coin"]
+    param = finding["param"]
+
+    current_pnl = finding.get("current_pnl", 0)
+    new_pnl = finding.get("candidate_pnl", 0)
+    win_rate = finding.get("win_rate", 50)
+
+    # 从实测数据补充
+    if pnl_info:
+        current_pnl = pnl_info.get("net_pnl", current_pnl)
+    if fee_info:
+        new_fee = fee_info.get("fee_ratio", 0)
+    else:
+        new_fee = 0
+
+    return score_param(
+        coin=coin,
+        param=param,
+        current_value=finding.get("current", 0),
+        new_value=finding.get("candidate", 0),
+        current_pnl=current_pnl,
+        new_pnl=new_pnl,
+        new_fee_ratio=new_fee,
+        win_rate=win_rate,
+        backtest_baseline_pnl=current_pnl,
+    )
+
+
+# ═══════════════════════════════════════════════════════════
+# 状态查看
+# ═══════════════════════════════════════════════════════════
+
+def show_scores():
+    scores = _load_scores()
+    history = scores.get("scores", [])
+    cooldowns = scores.get("cooldown", {})
+
+    print("📊 参数评分历史")
+    print("=" * 60)
+
+    if not history:
+        print("  暂无评分记录")
+    else:
+        recent = history[-20:]
+        by_grade = {}
+        for s in recent:
+            by_grade.setdefault(s["grade"], []).append(s)
+
+        for grade, items in by_grade.items():
+            gname = {"promote":"✅ 采纳","keep":"👀 观察","downgrade":"⚠️ 降级","rollback":"🔄 回滚"}.get(grade, grade)
+            print(f"\n  {gname} ({len(items)} 项):")
+            for s in items[-3:]:
+                print(f"    {s['coin']}.{s['param']}: {s['current_value']}→{s['new_value']}  评分: {s['score']:.0f}")
+
+    if cooldowns:
+        print(f"\n🚫 参数冷却 ({len(cooldowns)} 项):")
+        for key, info in cooldowns.items():
+            days_left = ROLLBACK_COOLDOWN_DAYS - (datetime.now(timezone.utc) - datetime.fromisoformat(info["rolled_at"].replace("Z", "+00:00"))).total_seconds() / 86400
+            if days_left > 0:
+                print(f"    {key}: 剩余 {days_left:.1f} 天 ({info.get('reason','')})")
+
+
+# ═══════════════════════════════════════════════════════════
+# CLI
+# ═══════════════════════════════════════════════════════════
+
+def _cli_param_score():
+        import sys
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+    
+        if len(sys.argv) < 2:
+            print("用法: python param_score.py [score|cooldown|extreme|fees|test]")
+            print("  score    查看评分历史")
+            print("  cooldown 查看冷却列表")
+            print("  extreme  检测极端行情")
+            print("  fees     测试手续费吞噬率")
+            print("  test     跑一次评分演示")
+            sys.exit(1)
+    
+        cmd = sys.argv[1]
+    
+        if cmd == "score":
+            show_scores()
+        elif cmd == "cooldown":
+            scores = _load_scores()
+            for k, v in scores.get("cooldown", {}).items():
+                print(f"  {k}: {v}")
+        elif cmd == "extreme":
+            result = is_extreme_market()
+            print(f"  极端行情: {'是 ⚠️' if result['is_extreme'] else '否 ✅'}")
+            for r in result["reasons"]:
+                print(f"    - {r}")
+        elif cmd == "fees":
+            for coin in ["TRX", "ETH", "SOL", "TRX_SWAP", "ETH_SWAP", "SOL_SWAP"]:
+                fees = calc_fee_ratio(coin)
+                print(f"  {coin:12s}  毛利润: ${fees['gross_pnl']:.3f}  手续费: ${fees['total_fees']:.4f}  吞噬率: {fees['fee_ratio']:.1%}  交易: {fees['total_trades']}")
+        elif cmd == "test":
+            # 演示评分
+            test_cases = [
+                ("ETH", "grid_count", 6, 2, -6.7, 8.1, 50, 0.15, 0.05),
+                ("SOL", "grid_count", 3, 2, -13.4, -5.8, 50, 0.30, 0.20),
+                ("TRX", "grid_range_pct", 0.05, 0.07, 16.5, 20.6, 42, 0.08, 0.06),
+                ("ETH_SWAP", "grid_count", 5, 2, -3.5, -1.2, 55, 0.25, 0.40),
+            ]
+            for coin, param, old_v, new_v, old_pnl, new_pnl, wr, old_fee, new_fee in test_cases:
+                r = score_param(coin, param, old_v, new_v, old_pnl, new_pnl, current_fee_ratio=old_fee, new_fee_ratio=new_fee, win_rate=wr, backtest_baseline_pnl=old_pnl)
+                print(f"\n  {coin}.{param}: {old_v}→{new_v}")
+                print(f"    PnL: {old_pnl:+.1f}%→{new_pnl:+.1f}%  胜率: {wr:.0f}%  手续费: {old_fee:.0%}→{new_fee:.0%}")
+                print(f"    评分: {r['score']:.0f}  等级: {r['grade']}  动作: {r['action']}")
+        else:
+            print(f"未知命令: {cmd}")
+    

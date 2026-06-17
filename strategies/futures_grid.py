@@ -21,6 +21,13 @@ class FuturesGridStrategy:
         self.grid_count = int(grid_count)
         self.capital = capital  # USDT 本金
         self.symbol = symbol
+        # 币种键，与 config.COIN_CONFIG 对应 ("TRX_SWAP", "ETH_SWAP", "SOL_SWAP")
+        self._coin = ""
+        if symbol:
+            for k, v in config.COIN_CONFIG.items():
+                if v.get("symbol") == symbol:
+                    self._coin = k
+                    break
 
         self.grid_prices = []
         self.buy_orders = {}   # price → {"order_id", "contracts"}
@@ -73,9 +80,27 @@ class FuturesGridStrategy:
 
         placed = 0
         per_level_usdt = self.capital / self.grid_count
+        
+        # ── 仓位上限检查（合约） ──
+        buy_capped = False
+        if self._coin:
+            cap_pct = config.SWAP_POSITION_CAP_PCT.get(self._coin, 0.5)
+            pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+            try:
+                pos = self.client.get_futures_position()
+                if pos:
+                    pos_val = abs(float(pos.get("pos", 0))) * float(pos.get("markPx", 0))
+                    if pos_val >= pos_cap_value * 0.7:
+                        buy_capped = True
+                        logger.warning(f"[仓位上限] {self._coin} 当前持仓 ${pos_val:.0f} >= 上限 ${pos_cap_value:.0f}×70%，只卖不买")
+            except Exception:
+                pass
+        
         for price in self.grid_prices:
             if price >= current_price:
                 continue
+            if buy_capped:
+                continue  # 超过仓位上限，跳过买单
             if placed >= self._max_entries:
                 logger.info(f"[合约网格] 初始达到最大档位 {self._max_entries}，停止挂单")
                 break
@@ -215,6 +240,23 @@ class FuturesGridStrategy:
             pending_buys = len(self.buy_orders)
             if (held + pending_buys) >= self._max_entries:
                 logger.info(f"[合约网格] 已达最大持仓档位 {self._max_entries}（买入{pending_buys}+持仓{held}），跳过补挂")
+                continue
+
+            # 仓位市值上限检查
+            pos_capped = False
+            if self._coin:
+                cap_pct = config.SWAP_POSITION_CAP_PCT.get(self._coin, 0.5)
+                pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+                try:
+                    pos = self.client.get_futures_position()
+                    if pos:
+                        pos_val = abs(float(pos.get("pos", 0))) * float(pos.get("markPx", 0))
+                        pos_capped = pos_val >= pos_cap_value * 0.7
+                        if pos_capped:
+                            logger.info(f"[仓位上限] {self._coin} 持仓 ${pos_val:.0f} >= ${pos_cap_value:.0f}×70%，跳过补挂")
+                except Exception:
+                    pass
+            if pos_capped:
                 continue
 
             idx = self.grid_prices.index(price) if price in self.grid_prices else -1

@@ -7,6 +7,8 @@ import logging
 import threading
 import sys
 import os
+import json
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,6 +35,7 @@ import volatility_adapter
 _macro = MacroIntelligence()
 GLOBAL_MACRO = {"risk_score": 0.5, "position_multiplier": 1.0}
 MACRO_CHECK_INTERVAL = 300  # 每5分钟更新宏观分析
+_LAST_GRID_REBUILD = {}  # ccy → timestamp: 网格重组时间（防停滞检测无限重启）
 
 def _update_macro():
     global GLOBAL_MACRO
@@ -82,7 +85,9 @@ def _floating_pnl(ccy: str, client, is_futures: bool, price: float = 0.0) -> flo
         if price <= 0:
             price = float(client.get_ticker()["last"])
         return total * (price - avg)
-    except Exception:
+    except Exception as e:
+        import logging as _log_
+        _log_.getLogger("bot").debug(f"_floating_pnl({ccy}) 异常(非致命): {e}")
         return 0.0
 
 
@@ -202,6 +207,193 @@ def _make_file_logger(name: str, log_path: Path, also_route: list[str] | None = 
     return logger
 
 
+# ══════════════════════════════════════════════════════════════
+# 孤儿仓位检测：策略全部熔断时自动安全退出
+# ══════════════════════════════════════════════════════════════
+
+_orphan_alerted = {}       # 币种 -> 上次告警时间戳，避免重复刷屏
+_ORPHAN_ALERT_COOLDOWN = 3600  # 最多每小时告警一次
+
+
+def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger, tracker=None):
+    """现货币种：所有策略被封 + 仍有持仓 → 限价卖出清仓"""
+    global _orphan_alerted
+    try:
+        # 只处理有永久禁用策略的情况，暂停/试用期不自动清仓
+        has_disabled = any(
+            sguard.check(ccy, s)["mode"] == "disabled"
+            for s in StrategyGuard._get_coin_strategies(ccy)
+        )
+        if not has_disabled:
+            return
+
+        pos = client.get_spot_position(ccy)
+        ticker = client.get_ticker()
+        price = float(ticker.get("last", 0))
+        if not pos or pos <= 0 or price <= 0:
+            return
+
+        # ── 粉尘检查：不足最小下单量直接跳过，不告警 ──
+        cc = config.COIN_CONFIG.get(ccy, {})
+        decimals = cc.get("size_decimals", 4)
+        min_sz = cc.get("min_order_size", 0.001)
+        import math
+        factor = 10 ** decimals
+        sz = math.floor(pos * 0.999 * factor) / factor
+        if sz < min_sz:
+            # 粉尘仓位：仅 INFO，不触发 ERROR 告警，不更新冷却计时
+            logger.info(f"  ℹ️  {ccy} 粉尘持仓 {pos:.6f} (< min {min_sz})，跳过孤儿清仓")
+            return
+
+        pos_value = pos * price
+        if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
+            return  # 告警冷却中
+
+        logger.error(
+            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos:.4f} {ccy} (${pos_value:.2f}) 裸持仓 — "
+            f"自动挂限价卖单 @ ${price:.4f}"
+        )
+        _orphan_alerted[ccy] = time.time()
+
+        send_tg(
+            f"🚨 孤儿仓位告警\n\n"
+            f"币种: {ccy}\n"
+            f"持仓: {pos:.4f} {ccy} ≈ ${pos_value:.2f}\n"
+            f"策略状态: 全部永久禁用\n"
+            f"操作: 自动挂限价卖单 @ ${price:.4f}"
+        )
+
+        # 限价卖出全部持仓
+        try:
+            # 清除旧网格残留挂单
+            pending = client.get_pending_orders()
+            if pending:
+                logger.info(f"  🧹 清除 {ccy} 残留 {len(pending)} 个挂单")
+                client.cancel_all_orders()
+
+            client.place_order("sell", price, sz)
+            logger.info(f"  ✅ 已挂孤儿仓位卖单: {sz:.4f} {ccy} @ ${price:.4f}")
+        except Exception as e:
+            logger.error(f"  ❌ 挂孤儿仓位卖单失败: {e}")
+
+    except Exception as e:
+        logger.debug(f"孤儿仓位检测异常(非致命): {e}")
+
+
+def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger, tracker=None):
+    """合约币种：所有策略被封 + 仍有持仓 → 市价平仓"""
+    global _orphan_alerted
+    try:
+        has_disabled = any(
+            sguard.check(ccy, s)["mode"] == "disabled"
+            for s in StrategyGuard._get_coin_strategies(ccy)
+        )
+        if not has_disabled:
+            return
+
+        pos = client.get_futures_position()
+        if not pos:
+            return
+        pos_qty = float(pos.get("pos", 0))
+        if pos_qty == 0:
+            return
+
+        if _orphan_alerted.get(ccy, 0) > time.time() - _ORPHAN_ALERT_COOLDOWN:
+            return
+
+        upl = float(pos.get("upl", 0))
+        logger.error(
+            f"🚨 {ccy} 所有策略永久禁用，仍有 {pos_qty} 张合约持仓(UPL={upl:+.4f}) — 自动平仓"
+        )
+        _orphan_alerted[ccy] = time.time()
+
+        send_tg(
+            f"🚨 孤儿仓位告警\n\n"
+            f"币种: {ccy}\n"
+            f"持仓: {pos_qty} 张合约\n"
+            f"未实现盈亏: {upl:+.4f} USDT\n"
+            f"策略状态: 全部永久禁用\n"
+            f"操作: 自动市价平仓"
+        )
+
+        try:
+            client.close_futures_position()
+            if upl != 0 and tracker:
+                tracker.record(upl, "trx_adaptive_futures" if "TRX" in ccy else "futures", note="orphan_force_close")
+            logger.info(f"  ✅ 已平孤儿合约仓位: {pos_qty} 张 (UPL {upl:+.4f})")
+        except Exception as e:
+            logger.error(f"  ❌ 平孤儿合约仓位失败: {e}")
+
+    except Exception as e:
+        logger.debug(f"孤儿仓位检测异常(非致命): {e}")
+
+
+def _coin_stop_loss_check(ccy: str, client, logger, tracker=None) -> bool:
+    """单币种止损检查：未实现亏损 > STOP_LOSS_PCT × initial_capital → 强制退出
+    返回 True 表示已触发止损并退出，False 表示正常"""
+    try:
+        cc = config.COIN_CONFIG.get(ccy, {})
+        cap = cc.get("initial_capital", 5000)
+        stop_threshold = cap * config.COIN_STOP_LOSS_PCT
+        swap_mode = "_SWAP" in ccy
+
+        if swap_mode:
+            pos = client.get_futures_position()
+            if not pos:
+                return False
+            pos_qty = float(pos.get("pos", 0))
+            if pos_qty == 0:
+                return False
+            upl = float(pos.get("upl", 0))
+            if upl < 0 and abs(upl) > stop_threshold:
+                logger.error(
+                    f"🛑 {ccy} 止损触发: 未实现亏损 ${upl:.2f} > "
+                    f"阈值 ${stop_threshold:.0f} (资本的 {config.COIN_STOP_LOSS_PCT:.0%})"
+                )
+                send_tg(f"🛑 {ccy} 止损触发\n\n未实现亏损: ${upl:.2f}\n阈值: ${stop_threshold:.0f}\n操作: 市价平仓")
+                client.close_futures_position()
+                if tracker:
+                    tracker.record(upl, "trx_adaptive_futures" if "TRX" in ccy else "futures", note="stop_loss")
+                return True
+        else:
+            base_ccy = ccy.split("_")[0]  # "ETH" or "SOL" etc
+            pos = client.get_spot_position(base_ccy)
+            if not pos or pos <= 0:
+                return False
+            avg_cost = client.get_avg_cost(base_ccy)
+            ticker = client.get_ticker()
+            price = float(ticker.get("last", 0))
+            if not avg_cost or price <= 0:
+                return False
+            unrealized = (price - avg_cost) * pos
+            if unrealized < 0 and abs(unrealized) > stop_threshold:
+                logger.error(
+                    f"🛑 {ccy} 止损触发: 均价 ${avg_cost:.4f} 现价 ${price:.4f} "
+                    f"持仓 {pos:.4f} {base_ccy} 浮亏 ${unrealized:.2f} > "
+                    f"阈值 ${stop_threshold:.0f}"
+                )
+                send_tg(
+                    f"🛑 {ccy} 止损触发\n\n"
+                    f"均价: ${avg_cost:.4f}\n现价: ${price:.4f}\n"
+                    f"持仓: {pos:.4f} {base_ccy}\n浮亏: ${unrealized:.2f}\n"
+                    f"阈值: ${stop_threshold:.0f}\n操作: 限价卖出"
+                )
+                # 限价卖出全部
+                decimals = cc.get("size_decimals", 4)
+                min_sz = cc.get("min_order_size", 0.001)
+                import math
+                factor = 10 ** decimals
+                sz = math.floor(pos * 0.999 * factor) / factor
+                if sz >= min_sz:
+                    client.place_order("sell", price, sz)
+                    logger.info(f"  ✅ 止损卖单已挂: {sz:.4f} {base_ccy} @ ${price:.4f}")
+                return True
+        return False
+    except Exception as e:
+        logger.debug(f"止损检查异常(非致命): {e}")
+        return False
+
+
 def run_coin(ccy: str, stop_event: threading.Event):
     coin_cfg = config.COIN_CONFIG[ccy]
     symbol          = coin_cfg["symbol"]
@@ -257,6 +449,11 @@ def run_coin(ccy: str, stop_event: threading.Event):
         elif guard_mode == "warn":
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
+        # ── 单币种止损 ──────────────────────────────────
+        if _coin_stop_loss_check(ccy, client, logger, tracker=tracker):
+            stop_event.wait(CHECK_INTERVAL)
+            continue
+
         # ── 策略级熔断 ──────────────────────────────────
         # 检查本币所有策略，全封则跳过（活一个就继续）
         all_blocked = False
@@ -271,6 +468,8 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 all_blocked = True
         if all_blocked:
             logger.warning(f"⚠️ {ccy} 所有策略已熔断 — 跳过")
+            # ── 孤儿仓位检测：策略全封仍有持仓 → 尝试安全退出 ──
+            _check_and_exit_orphan_spot(ccy, client, _sguard, logger)
             stop_event.wait(CHECK_INTERVAL)
             continue
 
@@ -325,15 +524,27 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 logger.info(tracker.summary())
 
                 # 同步策略贡献报表 + 账户守护者
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
+                today_str = str(datetime.now(timezone.utc).date())
                 for rec in tracker.records:
-                    key = f"spot_{ccy}:{rec['strategy']}:{rec.get('time','')}"
-                    if not hasattr(run_coin, f"_rep_{ccy}"):
-                        setattr(run_coin, f"_rep_{ccy}", set())
-                    reported = getattr(run_coin, f"_rep_{ccy}")
+                    rec_date = str(rec.get('time', ''))[:10] if rec.get('time') else ''
+                    if rec_date and rec_date != today_str:
+                        continue  # 非当日记录不喂入 guard/reporter，防止污染日统计
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('time','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
                         reported.add(key)
+                # 原子写入reported集合
+                tmp = f"{_rep_file}.tmp"
+                with open(tmp, "w") as f:
+                    json.dump(list(reported), f)
+                os.replace(tmp, _rep_file)
 
                 # 风控
                 dd = tracker.drawdown()
@@ -394,26 +605,21 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
                     # 网格停滞检测：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6  # 超过6h无成交视为停滞
-                    if trx_strat and trx_strat.running and tracker.records:
+                    last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                    if trx_strat and trx_strat.running and (now - last_rebuild) > STAGNATION_HOURS * 3600:
                         try:
-                            last_time = tracker.records[-1].get("time", "")
-                            if last_time:
-                                from datetime import datetime as dt
-                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                stale_h = (now - last_ts) / 3600
-                                if stale_h > STAGNATION_HOURS:
-                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                    pnl = trx_strat.stop()
-                                    if pnl != 0:
-                                        tracker.record(pnl, "trx_adaptive")
-                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
-                                    if _sg_allowed and _guard_can_open:
-                                        trx_strat.start(new_regime, price,
-                                                        capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
-                                                        indicators=indicators)
-                                        # 记录重组时间戳，防止陷入无限重启循环
-                                        tracker.record(0, "trx_adaptive", note="grid_restart")
-                                        logger.info(f"🔧 {ccy} 网格重组完成")
+                            stale_h = (now - last_rebuild) / 3600
+                            logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                            pnl = trx_strat.stop()
+                            if pnl != 0:
+                                tracker.record(pnl, "trx_adaptive")
+                            _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive")
+                            if _sg_allowed and _guard_can_open:
+                                trx_strat.start(new_regime, price,
+                                                capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                indicators=indicators)
+                                _LAST_GRID_REBUILD[ccy] = now
+                                logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
                 else:
@@ -442,8 +648,35 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
                             if new_regime == "ranging" and not _grid_allowed:
                                 logger.info(f"⚠️ {ccy} 网格策略受限（StrategyGuard），空仓等待")
-                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed:
-                                logger.info(f"⚠️ {ccy} 趋势策略受限（StrategyGuard），空仓等待")
+                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and not _grid_allowed:
+                                logger.info(f"⚠️ {ccy} 趋势+网格均受限（StrategyGuard），空仓等待")
+                            elif new_regime in ("trending_up", "trending_down") and not _trend_allowed and _grid_allowed:
+                                # 趋势禁用→回退到网格（内联网格启动逻辑，避免elif截断）
+                                logger.info(f"⚠️ {ccy} 趋势策略禁用，回退到网格管理持仓")
+                                coin_base = ccy.split("-")[0]
+                                grid_count = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
+                                grid_range = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                grid_range, grid_count, _ = volatility_adapter.get_adapted_grid_params(
+                                    coin_base, grid_range, grid_count, indicators)
+                                m_adj = get_macro_adjustment(GLOBAL_MACRO)
+                                gwide = m_adj["grid_width_mult"] * (1.3 if "widen_grid" in _guard_extra else 1.0)
+                                grid_range *= gwide
+                                grid_count = max(2, int(grid_count * m_adj["max_positions_mult"]))
+                                cap_mult = m_adj["position_multiplier"] * _grid_mult * _guard_cap_mult
+                                lower, upper = get_range_bounds(df, grid_range)
+                                try:
+                                    strat = GridStrategy(
+                                        client=client, lower=lower, upper=upper,
+                                        grid_count=grid_count,
+                                        capital=initial_capital * max(0.5, 0.9 * cap_mult) * _ai_safety_mult,
+                                        size_decimals=size_dec, symbol=ccy,
+                                    )
+                                    strat.start(price)
+                                    current_strategy = ("grid", strat)
+                                    _LAST_GRID_REBUILD[ccy] = now  # 防同tick内停滞检测触发
+                                    logger.info(f"启动网格: {lower:.6f} ~ {upper:.6f}（仓位×{cap_mult:.0%})")
+                                except ValueError as e:
+                                    logger.warning(f"网格初始化失败: {e}")
                             elif not _guard_can_open:
                                 logger.info(f"🛡️ {ccy} 预警模式禁止新开仓，空仓等待")
                             elif new_regime == "ranging":
@@ -510,33 +743,30 @@ def run_coin(ccy: str, stop_event: threading.Event):
                         try:
                             name, strat = current_strategy
                             if name == "grid" and strat.running:
-                                last_time = tracker.records[-1].get("time", "")
-                                if last_time:
-                                    from datetime import datetime as dt
-                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                    stale_h = (now - last_ts) / 3600
-                                    if stale_h > STAGNATION_HOURS:
-                                        logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                        _pnl = strat.stop()
-                                        if _pnl:
-                                            tracker.record(_pnl, name)
-                                        _grid_allowed, _grid_mult = _strat_gate(ccy, "grid")
-                                        if _grid_allowed and _guard_can_open:
-                                            coin_base = ccy.split("-")[0]
-                                            gc = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
-                                            gr = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
-                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
-                                            lower, upper = get_range_bounds(df, gr)
-                                            new_strat = GridStrategy(
-                                                client=client, lower=lower, upper=upper,
-                                                grid_count=gc,
-                                                capital=initial_capital * _grid_mult * _guard_cap_mult * _ai_safety_mult,
-                                                size_decimals=size_dec, symbol=ccy,
-                                            )
-                                            new_strat.start(price)
-                                            current_strategy = ("grid", new_strat)
-                                            logger.info(f"🔧 {ccy} 网格重组完成")
-                                            tracker.record(0, "grid", note="grid_restart")
+                                last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                    stale_h = (now - last_rebuild) / 3600
+                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                    _pnl = strat.stop()
+                                    if _pnl:
+                                        tracker.record(_pnl, name)
+                                    _grid_allowed, _grid_mult = _strat_gate(ccy, "grid")
+                                    if _grid_allowed and _guard_can_open:
+                                        coin_base = ccy.split("-")[0]
+                                        gc = getattr(config, f"{coin_base}_SPOT_GRID_COUNT", config.GRID_COUNT)
+                                        gr = getattr(config, f"{coin_base}_SPOT_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                        gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                        lower, upper = get_range_bounds(df, gr)
+                                        new_strat = GridStrategy(
+                                            client=client, lower=lower, upper=upper,
+                                            grid_count=gc,
+                                            capital=initial_capital * _grid_mult * _guard_cap_mult * _ai_safety_mult,
+                                            size_decimals=size_dec, symbol=ccy,
+                                        )
+                                        new_strat.start(price)
+                                        current_strategy = ("grid", new_strat)
+                                        _LAST_GRID_REBUILD[ccy] = now
+                                        logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
 
@@ -702,8 +932,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         try:
             pos = client.get_futures_position()
             if pos and float(pos.get("pos", 0)) != 0:
-                logger.warning(f"[启动清理] 检测到 {ccy} 残留合约持仓，执行平仓（第{_attempt+1}次）")
+                upl = float(pos.get("upl", 0))
+                logger.warning(f"[启动清理] 检测到 {ccy} 残留合约持仓 UPL={upl:+.4f}，执行平仓（第{_attempt+1}次）")
                 client.close_futures_position()
+                if upl != 0:
+                    tracker.record(upl, "trx_adaptive_futures", note="startup_force_close")
                 logger.info(f"[启动清理] {ccy} 合约持仓已平")
             client.cancel_all_orders()
             client.cancel_algo_orders()
@@ -718,7 +951,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
     # TRX_SWAP 使用专属合约自适应策略
     is_trx_swap  = (ccy == "TRX_SWAP")
-    trx_swap_strat = TRXAdaptiveFuturesStrategy(client, initial_capital) if is_trx_swap else None
+    trx_swap_strat = TRXAdaptiveFuturesStrategy(client, initial_capital, tracker=tracker) if is_trx_swap else None
 
     current_strategy  = None
     current_regime    = None
@@ -751,6 +984,11 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         elif guard_mode == "warn":
             logger.info(f"⚠️ 预警模式: {guard_result['reason']} — 禁止新开仓")
 
+        # ── 单币种止损（合约） ──────────────────────────
+        if _coin_stop_loss_check(ccy, client, logger, tracker=tracker):
+            stop_event.wait(CHECK_INTERVAL)
+            continue
+
         # ── 策略级熔断（合约） ──────────────────────────
         all_blocked = False
         for sname in StrategyGuard._get_coin_strategies(ccy):
@@ -764,6 +1002,8 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 all_blocked = True
         if all_blocked:
             logger.warning(f"⚠️ {ccy} 所有策略已熔断 — 跳过")
+            # ── 孤儿仓位检测：合约策略全封仍有持仓 → 平仓退出 ──
+            _check_and_exit_orphan_swap(ccy, client, _sguard, logger, tracker=tracker)
             stop_event.wait(CHECK_INTERVAL)
             continue
 
@@ -811,15 +1051,34 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 logger.info(tracker.summary())
 
                 # 同步策略贡献报表 + 账户守护者（合约）
+                # 同步策略贡献报表 + 账户守护者（swap）
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
+                # 同步策略贡献报表 + 账户守护者（swap）
+                _rep_file = f"reported_{ccy.replace('-','_')}.json"
+                try:
+                    with open(_rep_file) as f:
+                        reported = set(json.load(f))
+                except:
+                    reported = set()
+                today_str = str(datetime.now(timezone.utc).date())
                 for rec in tracker.records:
-                    key = f"swap_{ccy}:{rec['strategy']}:{rec.get('time','')}"
-                    if not hasattr(run_swap_coin, f"_rep_{ccy}"):
-                        setattr(run_swap_coin, f"_rep_{ccy}", set())
-                    reported = getattr(run_swap_coin, f"_rep_{ccy}")
+                    rec_date = str(rec.get('time', ''))[:10] if rec.get('time') else ''
+                    if rec_date and rec_date != today_str:
+                        continue
+                    key = f"{ccy}:{rec['strategy']}:{rec.get('time','')}:{rec.get('pnl','')}"
                     if key not in reported:
                         _reporter.record(ccy, rec["strategy"], rec["pnl"], rec.get("fee", 0))
                         _guard.add_trade(ccy, rec["pnl"])
                         reported.add(key)
+                tmp = f"{_rep_file}.tmp"
+                with open(tmp, "w") as f:
+                    json.dump(list(reported), f)
+                os.replace(tmp, _rep_file)
 
                 dd = tracker.drawdown()
                 if dd >= config.MAX_DRAWDOWN_PCT:
@@ -877,25 +1136,22 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                     # 网格停滞检测（合约）：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6
-                    if trx_swap_strat and trx_swap_strat.running and tracker.records:
+                    if trx_swap_strat and trx_swap_strat.running:
                         try:
-                            last_time = tracker.records[-1].get("time", "")
-                            if last_time:
-                                from datetime import datetime as dt
-                                last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                stale_h = (now - last_ts) / 3600
-                                if stale_h > STAGNATION_HOURS:
-                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
-                                    pnl = trx_swap_strat.stop()
-                                    if pnl != 0:
-                                        tracker.record(pnl, "trx_adaptive_futures")
-                                    _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
-                                    if _sg_allowed and _guard_can_open:
-                                        trx_swap_strat.start(new_regime, price,
-                                                             capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
-                                                             indicators=indicators)
-                                        logger.info(f"🔧 {ccy} 网格重组完成")
-                                        tracker.record(0, "trx_adaptive_futures", note="grid_restart")
+                            last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                            if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                stale_h = (now - last_rebuild) / 3600
+                                logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                pnl = trx_swap_strat.stop()
+                                if pnl != 0:
+                                    tracker.record(pnl, "trx_adaptive_futures")
+                                _sg_allowed, _sg_mult = _strat_gate(ccy, "trx_adaptive_futures")
+                                if _sg_allowed and _guard_can_open:
+                                    trx_swap_strat.start(new_regime, price,
+                                                         capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
+                                                         indicators=indicators)
+                                    _LAST_GRID_REBUILD[ccy] = now
+                                    logger.info(f"🔧 {ccy} 网格重组完成")
                         except Exception:
                             pass
                 else:
@@ -993,37 +1249,34 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                     # 通用期货网格停滞检测（ETH_SWAP/SOL_SWAP）：运行中但长时间无成交 → 强制重组
                     STAGNATION_HOURS = 6
-                    if not is_trx_swap and current_strategy and tracker.records:
+                    if not is_trx_swap and current_strategy:
                         try:
                             name, strat = current_strategy
                             if name == "futures_grid" and strat.running:
-                                last_time = tracker.records[-1].get("time", "")
-                                if last_time:
-                                    from datetime import datetime as dt
-                                    last_ts = dt.strptime(last_time, "%Y-%m-%d %H:%M:%S").timestamp()
-                                    stale_h = (now - last_ts) / 3600
-                                    if stale_h > STAGNATION_HOURS:
-                                        logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
-                                        _pnl = strat.stop()
-                                        if _pnl:
-                                            tracker.record(_pnl, name)
-                                        _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
-                                        if _fb_allowed and _guard_can_open:
-                                            coin_base = ccy.split("-")[0]
-                                            gc = getattr(config, f"{coin_base}_GRID_COUNT", config.GRID_COUNT)
-                                            gr = getattr(config, f"{coin_base}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
-                                            gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
-                                            lower, upper = get_range_bounds(df, gr)
-                                            new_strat = FuturesGridStrategy(
-                                                client=client, lower=lower, upper=upper,
-                                                grid_count=gc,
-                                                capital=initial_capital * _fb_mult * _guard_cap_mult * _ai_safety_mult,
-                                                symbol=ccy,
-                                            )
-                                            new_strat.start(price)
-                                            current_strategy = ("futures_grid", new_strat)
-                                            logger.info(f"🔧 {ccy} 合约网格重组完成")
-                                            tracker.record(0, "futures_grid", note="grid_restart")
+                                last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
+                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                    stale_h = (now - last_rebuild) / 3600
+                                    logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
+                                    _pnl = strat.stop()
+                                    if _pnl:
+                                        tracker.record(_pnl, name)
+                                    _fb_allowed, _fb_mult = _strat_gate(ccy, "futures_grid")
+                                    if _fb_allowed and _guard_can_open:
+                                        coin_base = ccy.split("-")[0]
+                                        gc = getattr(config, f"{coin_base}_GRID_COUNT", config.GRID_COUNT)
+                                        gr = getattr(config, f"{coin_base}_GRID_RANGE_PCT", config.GRID_RANGE_PCT)
+                                        gr, gc, _ = volatility_adapter.get_adapted_grid_params(coin_base, gr, gc, indicators)
+                                        lower, upper = get_range_bounds(df, gr)
+                                        new_strat = FuturesGridStrategy(
+                                            client=client, lower=lower, upper=upper,
+                                            grid_count=gc,
+                                            capital=initial_capital * _fb_mult * _guard_cap_mult * _ai_safety_mult,
+                                            symbol=ccy,
+                                        )
+                                        new_strat.start(price)
+                                        current_strategy = ("futures_grid", new_strat)
+                                        _LAST_GRID_REBUILD[ccy] = now
+                                        logger.info(f"🔧 {ccy} 合约网格重组完成")
                         except Exception:
                             pass
 

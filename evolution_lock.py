@@ -149,7 +149,7 @@ def can_evolve(entry: str = "unknown") -> tuple:
 
     # ── 极端行情 ──
     try:
-        from param_score import is_extreme_market
+        from brain import is_extreme_market
         extreme = is_extreme_market()
         if extreme.get("is_extreme"):
             triggers = "; ".join(extreme.get("reasons", ["unknown"]))
@@ -235,7 +235,7 @@ def safe_write_config(coin: str, param: str, value, source: str = "unknown",
 
     # ── 参数黑名单 ──
     try:
-        from param_score import is_on_cooldown
+        from brain import is_on_cooldown
         cooldown = is_on_cooldown(coin, param, value)
         if cooldown.get("on_cooldown") and not cooldown.get("can_override"):
             logger.warning(f"🚫 safe_write_config 拦截: {cooldown['reason']}")
@@ -586,8 +586,20 @@ if __name__ == "__main__":
                 rollback_ok = sum(1 for w in recent if w["success"] and "rollback" in w.get("entry", "").lower())
                 non_rollback_ok = sum(1 for w in recent if w["success"] and "rollback" not in w.get("entry", "").lower())
                 blocked = sum(1 for w in recent if not w["success"])
-                anomalies = [w for w in recent if w["success"] and "rollback" not in w.get("entry", "").lower()]
-                status = "safe" if non_rollback_ok == 0 and len(anomalies) == 0 else ("warning" if blocked > 0 else "alert")
+                # 经 safe_write_config 批准的 brain.py 写入是预期行为，不算异常
+                # 真正异常 = 成功写入但来源不是已知的授权入口（brain.py, ai_tuner.py 等）
+                AUTHORIZED_SOURCES = ("brain.py", "ai_tuner", "rollback")
+                anomalies = [w for w in recent if w["success"]
+                             and not any(src in w.get("entry", "").lower() for src in AUTHORIZED_SOURCES)]
+                # 状态：safe=无写入或仅rollback；warning=有拦截(锁在工作)；info=授权写入；alert=未授权写入
+                if anomalies:
+                    status = "alert"
+                elif blocked > 0:
+                    status = "warning"
+                elif non_rollback_ok > 0:
+                    status = "info"
+                else:
+                    status = "safe"
                 print(_json.dumps({
                     "total_writes": len(recent),
                     "rollback_success": rollback_ok,

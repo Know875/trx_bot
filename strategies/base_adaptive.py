@@ -252,6 +252,18 @@ class BaseAdaptiveStrategy:
             coin, grid_range, gc, indicators)
         capital = self.capital * self._grid_position_pct()
 
+        # ── 仓位上限检查：防止网格接飞刀无限累积 ──
+        is_swap = "_SWAP" in coin
+        cap_pct = config.SWAP_POSITION_CAP_PCT.get(coin, 0.5) if is_swap else config.POSITION_CAP_PCT.get(coin, 1.5)
+        pos_cap_value = cap_pct * config.COIN_CONFIG.get(coin, {}).get("initial_capital", 5000)
+        current_pos_value = self._get_position_value(coin)
+        buy_capped = current_pos_value >= pos_cap_value * 0.7  # 超过70%上限就停止买盘
+        if buy_capped:
+            logger.warning(
+                f"[仓位上限] {coin} 当前持仓 ${current_pos_value:.0f} >= "
+                f"上限 ${pos_cap_value:.0f}×70%，只卖不买"
+            )
+
         lower = mid * (1 - grid_range / 2)
         upper = mid * (1 + grid_range / 2)
 
@@ -279,6 +291,8 @@ class BaseAdaptiveStrategy:
 
         for price in self._grid_prices:
             if price < current_price:
+                if buy_capped:
+                    continue  # 超过仓位上限，跳过买单
                 size = self._calc_trade_size(per_level, price)
                 if size <= 0:
                     continue
@@ -305,12 +319,30 @@ class BaseAdaptiveStrategy:
 
         if self._buy_orders or self._sell_orders:
             self._state = GRID_RUNNING
+            self._grid_center = mid  # 记住锚点，用于漂移检测
+            self._grid_half_range = (upper - lower) / 2  # 记住原始半距
             tag = "死盘窄距" if self._is_dead_grid else ("亚洲高峰" if is_asia_peak() else "非高峰")
             logger.info(f"[网格] {tag} {lower:.6f}~{upper:.6f} 锚点{mid:.6f} "
                         f"买单{len(self._buy_orders)}个({total_buy}) "
                         f"卖单{len(self._sell_orders)}个({total_sell})")
         else:
             logger.error("[网格] 所有挂单失败，回到 IDLE")
+
+    def _get_position_value(self, coin: str) -> float:
+        """获取当前现货持仓市值（USD）"""
+        try:
+            base = coin.split("_")[0] if "_" in coin else coin  # "TRX_SWAP" → "TRX"
+            # 合约用保证金/未实现，现货用持仓×价格
+            if "_SWAP" in coin:
+                pos = self.client.get_futures_position()
+                if pos:
+                    return abs(float(pos.get("pos", 0))) * float(pos.get("markPx", 0))
+                return 0.0
+            qty = self.client.get_spot_position(base)
+            ticker = self.client.get_ticker()
+            return qty * float(ticker.get("last", 0))
+        except Exception:
+            return 0.0
 
     def _grid_position_pct(self):
         return config.TRX_GRID_POSITION_PCT
@@ -339,17 +371,16 @@ class BaseAdaptiveStrategy:
             return pnl
 
         # ── 网格漂移检测 ──
-        if self._buy_orders or self._sell_orders:
-            grid_prices = list(self._buy_orders.keys()) + list(self._sell_orders.keys())
-            if grid_prices:
-                grid_center = (max(grid_prices) + min(grid_prices)) / 2
-                grid_range  = (max(grid_prices) - min(grid_prices)) / 2
-                drift = abs(current_price - grid_center) / grid_center
-                if drift > grid_range / grid_center * 1.5:
-                    logger.info(f"[网格] 价格漂移 {drift:.4%}，重新锚定")
-                    self._cancel_grid(current_price)
-                    self._start_grid(current_price, ind)
-                    return 0.0
+        stored_center = getattr(self, '_grid_center', None)
+        stored_half = getattr(self, '_grid_half_range', None)
+        if stored_center is not None and stored_half is not None and stored_half > 0:
+            drift = abs(current_price - stored_center) / stored_center
+            threshold = (stored_half / stored_center) * 1.5
+            if drift > threshold:
+                logger.info(f"[网格] 价格漂移 {drift:.4%} > {threshold:.4%}，重新锚定")
+                self._cancel_grid(current_price)
+                self._start_grid(current_price, ind)
+                return 0.0
 
         # ── 批量查询挂单 ──
         try:

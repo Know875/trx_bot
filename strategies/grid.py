@@ -22,6 +22,8 @@ class GridStrategy:
         self.capital = capital
         self._size_dec = size_decimals
         self.symbol = symbol
+        # 币种标签，与 config.COIN_CONFIG 的键对应 ("TRX", "ETH", "SOL")
+        self._coin = symbol.split("-")[0] if symbol else ""
 
         self.grid_prices = []
         self.orders = {}        # price -> {order_id, side, size}
@@ -30,6 +32,9 @@ class GridStrategy:
 
         # ── 最大持仓档位（SOL 限仓防过重暴露）──────────────────
         self._max_entries = getattr(config, "SOL_SPOT_MAX_GRID_ENTRIES", 99) if "SOL" in symbol else 99
+
+        # ── 只卖模式：仓位超限时只挂卖单不挂买单，卖单成交后不补买 ──
+        self._sell_only_mode = False
 
         self._validate()
         self._build_grid()
@@ -65,41 +70,139 @@ class GridStrategy:
         return math.floor(adjusted * factor) / factor
 
     def start(self, current_price):
-        """初始化挂单：只挂当前价格以下的买单，卖单等买单成交后再补挂"""
-        logger.info(f"启动网格，当前价格: {current_price}")
+        """初始化挂单：价格在区间内挂买单，超限则挂卖单（只卖模式）。
+        价格漂移超区间自动重锚。"""
+        logger.info(f"启动网格，当前价格: {current_price} 区间: {self.lower:.5f}~{self.upper:.5f}")
 
-        placed = 0
-        for price in self.grid_prices:
-            if price >= current_price:
-                continue
-            if placed >= self._max_entries:
-                logger.info(f"[网格] 初始达到最大档位 {self._max_entries}，停止挂单")
-                break
-            size = self._order_size(price)
-            if size <= 0:
-                continue
+        # ── 漂移重锚：价格超出网格区间 → 以当前价重新居中 ──
+        grid_range_pct = (self.upper - self.lower) / ((self.lower + self.upper) / 2)
+        if current_price < self.lower * 0.95 or current_price > self.upper * 1.05:
+            mid = current_price
+            new_lower = mid * (1 - grid_range_pct / 2)
+            new_upper = mid * (1 + grid_range_pct / 2)
+            logger.info(f"[网格重锚] 价格 ${current_price:.2f} 超出区间 "
+                        f"({self.lower:.2f}~{self.upper:.2f})，重锚到 "
+                        f"{new_lower:.2f}~{new_upper:.2f}")
+            self.lower = new_lower
+            self.upper = new_upper
+            self._build_grid()
+
+        # ── 仓位上限检查（在重锚后执行，用最新价格算市值）──
+        buy_capped = False
+        self._sell_only_mode = False
+        current_qty = 0.0
+        pos_cap_value = self.capital * 2  # 默认不限制
+        if self._coin:
+            cap_pct = config.POSITION_CAP_PCT.get(self._coin, 1.5)
+            pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
             try:
-                order_id = self.client.place_order("buy", price, size)
-                self.orders[price] = {"order_id": order_id, "side": "buy", "size": size}
-                placed += 1
-                logger.info(f"挂单 buy {size} @ {price}")
-            except Exception as e:
-                logger.error(f"挂单失败 buy @ {price}: {e}")
+                base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                current_qty = self.client.get_spot_position(base)
+                val = current_qty * current_price
+                if val >= pos_cap_value * 0.7:
+                    buy_capped = True
+                    self._sell_only_mode = True
+                    logger.warning(f"[仓位上限] {self._coin} 持仓 ${val:.0f} (={current_qty:.4f}×${current_price:.2f}) "
+                                  f">= 上限 ${pos_cap_value:.0f}×70%，只卖不买")
+            except Exception:
+                pass
+
+        placed_sells = 0
+        placed_buys = 0
+
+        for price in self.grid_prices:
+            if price < current_price:
+                # ── 买单：仅当未超限且未达最大档位 ──
+                if buy_capped:
+                    continue
+                if placed_buys >= self._max_entries:
+                    logger.info(f"[网格] 初始买单达最大档位 {self._max_entries}")
+                    break
+                size = self._order_size(price)
+                if size <= 0:
+                    continue
+                try:
+                    order_id = self.client.place_order("buy", price, size)
+                    self.orders[price] = {"order_id": order_id, "side": "buy", "size": size}
+                    placed_buys += 1
+                    logger.info(f"挂单 buy {size} @ {price}")
+                except Exception as e:
+                    logger.error(f"挂单失败 buy @ {price}: {e}")
+
+            elif price > current_price:
+                # ── 卖单：只在超限时主动挂（正常模式卖单由买单成交触发）──
+                if not buy_capped:
+                    continue
+                if placed_sells >= self._max_entries:
+                    logger.info(f"[网格] 初始卖单达最大档位 {self._max_entries}")
+                    break
+                # 每个卖单档位卖出 (超限部分 / 档位数) 的量
+                levels_above = sum(1 for p in self.grid_prices if p > current_price)
+                levels_above = max(levels_above, 1)
+                # 目标降到上限的50%，留安全边际
+                target_qty = (pos_cap_value * 0.5) / current_price
+                excess = max(0, current_qty - target_qty)
+                sell_per_level = excess / levels_above
+                sell_per_level = self._fee_adjusted_size(sell_per_level)
+                min_size = config.COIN_CONFIG.get(self._coin, {}).get("min_order_size", 0.001)
+                if sell_per_level < min_size:
+                    logger.info(f"[仓位上限] 每档卖出 {sell_per_level:.6f} < min {min_size}，不再挂卖单")
+                    break
+                try:
+                    order_id = self.client.place_order("sell", price, sell_per_level)
+                    self.orders[price] = {"order_id": order_id, "side": "sell", "size": sell_per_level}
+                    self.pending_sells[price] = -1.0  # 标记: 只卖模式卖单(用OKX均价结算盈亏)
+                    placed_sells += 1
+                    logger.info(f"挂单 sell {sell_per_level} @ {price}（仓位超限减仓，目标≤${pos_cap_value*0.5:.0f}）")
+                except Exception as e:
+                    logger.error(f"挂单失败 sell @ {price}: {e}")
 
         if self.orders:
             self.running = True
-            logger.info(f"网格启动成功，共 {sum(1 for info in self.orders.values() if isinstance(info, dict) and info.get('side')=='buy')}/{self._max_entries} 个买单挂单")
+            parts = []
+            if placed_buys:
+                parts.append(f"买{placed_buys}")
+            if placed_sells:
+                parts.append(f"卖{placed_sells}(减仓)")
+            label = "+".join(parts) if parts else "0"
+            logger.info(f"[网格] 启动成功: {label}挂单 "
+                        f"(区间 {self.lower:.2f}~{self.upper:.2f}，仓位上限{'已触发' if buy_capped else '正常'})")
         else:
             logger.error("网格所有挂单均失败，策略未启动")
 
     def on_tick(self):
         """
-        检查成交情况，成交后在对面挂反向单
+        检查成交情况，成交后在对面挂反向单。
+        只卖模式：卖单成交后不补买；仓位降到上限50%以下自动恢复正常。
         返回本次循环的盈亏（已实现）
         """
         realized_pnl = 0.0
         if not self.running:
             return realized_pnl
+
+        # ── 只卖模式自动退出检查 ──
+        if self._sell_only_mode and self._coin:
+            try:
+                base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                qty = self.client.get_spot_position(base)
+                ticker = self.client.get_ticker()
+                price = float(ticker["last"])
+                cap_pct = config.POSITION_CAP_PCT.get(self._coin, 1.5)
+                cap_val = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+                if qty * price < cap_val * 0.5:
+                    self._sell_only_mode = False
+                    logger.info(f"[仓位上限] {self._coin} 持仓 ${qty*price:.0f} < 上限${cap_val:.0f}×50%，恢复正常网格")
+                    # 清掉剩余卖单，下次tick自然会重建买单
+                    for p, info in list(self.orders.items()):
+                        if info["side"] == "sell":
+                            try:
+                                self.client.cancel_order(info["order_id"])
+                            except Exception:
+                                pass
+                            del self.orders[p]
+                    self.pending_sells.clear()
+            except Exception:
+                pass
 
         for price, info in list(self.orders.items()):
             try:
@@ -141,21 +244,45 @@ class GridStrategy:
                 # 卖单成交时才结算真实盈亏
                 buy_cost = self.pending_sells.pop(price, None)
                 if buy_cost is not None:
+                    # 只卖模式卖单(buy_cost<=0): 用OKX持仓均价计算盈亏
+                    if buy_cost <= 0 and self._sell_only_mode:
+                        try:
+                            base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                            buy_cost = self.client.get_avg_cost(self.symbol) or filled_price
+                        except Exception:
+                            buy_cost = filled_price
                     fee = filled_size * (buy_cost + filled_price) * config.SPOT_FEE_RATE
                     pnl = filled_size * (filled_price - buy_cost) - fee
                     realized_pnl += pnl
-                    logger.info(f"网格盈亏: +{pnl:.4f} USDT（买 {buy_cost:.6f} → 卖 {filled_price:.6f}）")
+                    tag = "(减仓)" if self._sell_only_mode else ""
+                    logger.info(f"网格盈亏{tag}: {pnl:+.4f} USDT（买 {buy_cost:.6f} → 卖 {filled_price:.6f}）")
                     notify.send_tg(
-                        f"💰 网格成交 [{self.symbol}]\n"
+                        f"💰 网格成交{tag} [{self.symbol}]\n"
                         f"买 {buy_cost:.6f} → 卖 {filled_price:.6f}\n"
-                        f"盈亏: +{pnl:.4f} USDT"
+                        f"盈亏: {pnl:+.4f} USDT"
                     )
 
-                # 在下方一格补挂买单（SOL 限仓检查）
+                # 在下方一格补挂买单（只卖模式下不补买；仓位上限检查 + SOL 限仓检查）
+                if self._sell_only_mode:
+                    continue  # 只卖模式：卖完不补买
                 active_buys = sum(1 for info in self.orders.values()
                                   if isinstance(info, dict) and info.get("side") == "buy")
                 held = len(self.pending_sells)
-                if idx > 0 and (active_buys + held) < self._max_entries:
+                
+                # 仓位市值上限检查
+                pos_capped = False
+                if self._coin:
+                    cap_pct = config.POSITION_CAP_PCT.get(self._coin, 1.5)
+                    pos_cap_value = cap_pct * config.COIN_CONFIG.get(self._coin, {}).get("initial_capital", 5000)
+                    try:
+                        base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                        qty = self.client.get_spot_position(base)
+                        val = qty * filled_price
+                        pos_capped = val >= pos_cap_value * 0.7
+                    except Exception:
+                        pass
+                
+                if idx > 0 and (active_buys + held) < self._max_entries and not pos_capped:
                     buy_price = self.grid_prices[idx - 1]
                     try:
                         oid = self.client.place_order("buy", buy_price, filled_size)
@@ -209,9 +336,17 @@ class GridStrategy:
             try:
                 ticker = self.client.get_ticker()
                 market_price = float(ticker["last"])
+                buy_cost = pos["buy_cost"]
+                # 只卖模式标记(-1): 用OKX持仓均价
+                if buy_cost <= 0:
+                    try:
+                        base = self._coin.split("_")[0] if "_" in self._coin else self._coin
+                        buy_cost = self.client.get_avg_cost(self.symbol) or market_price
+                    except Exception:
+                        buy_cost = market_price
                 self.client.place_order("sell", market_price, pos["size"], order_type="market")
-                fee = pos["size"] * (pos["buy_cost"] + market_price) * config.SPOT_FEE_RATE
-                pnl = pos["size"] * (market_price - pos["buy_cost"]) - fee
+                fee = pos["size"] * (buy_cost + market_price) * config.SPOT_FEE_RATE
+                pnl = pos["size"] * (market_price - buy_cost) - fee
                 total_pnl += pnl
                 logger.info(
                     f"[网格平仓] 卖出 {pos['size']} {self.symbol} @ {market_price:.4f} "

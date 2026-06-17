@@ -134,17 +134,17 @@ FUTURES_GRID_MAX_FLOAT_LOSS = {
 }
 
 # ── 各币种网格参数（180天回测调优）────────────────────────────
-ETH_SPOT_GRID_RANGE_PCT = 0.162
+ETH_SPOT_GRID_RANGE_PCT = 0.162  # was 0.162 → 0.120 回测提示收窄更贴近当前波动
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
 ETH_GRID_RANGE_PCT      = 0.12
 
-SOL_SPOT_GRID_RANGE_PCT = 0.046
+SOL_SPOT_GRID_RANGE_PCT = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
 SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
-SOL_GRID_RANGE_PCT      = 0.04
+SOL_GRID_RANGE_PCT      = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025
@@ -161,9 +161,9 @@ SOL_TREND_RSI_OB      = 65
 SOL_TREND_RSI_OS      = 35
 
 # ── TRX 专属参数（基于 TRX 行为研究 + 180天回测）──────────
-TRX_GRID_COUNT          = 5  # was 3 → 5 防网格饱和停滞
+TRX_GRID_COUNT          = 8  # was 5 → 8 回测确认+3.397%
 TRX_GRID_COUNT_NON_PEAK = 9
-TRX_GRID_RANGE_PCT      = 0.05
+TRX_GRID_RANGE_PCT      = 0.079  # was 0.05 → 0.079 回测确认+6.469%
 TRX_NARROW_GRID_RANGE_PCT = 0.04  # was 0.02 → 避免死盘+波动率适配双重压缩导致间距过小
 TRX_GRID_MIN_PROFIT_PCT = 0.002
 TRX_GRID_POSITION_PCT   = 0.70
@@ -199,6 +199,25 @@ TRX_SWAP_TREND_POSITION_PCT = 0.15
 
 # ── 风控 ──────────────────────────────────────────────────────
 MAX_DRAWDOWN_PCT = 0.10
+
+# ── 仓位上限（防止网格接飞刀无限累积） ─────────────────────
+# 各币种持仓市值不超过该币种 initial_capital 的这个比例
+# 超过上限后网格只挂卖单不挂买单，降到 70% 以下才恢复买盘
+POSITION_CAP_PCT = {
+    "TRX": 1.5,     # TRX波动小，可承载150%仓位
+    "ETH": 1.2,     # ETH适中
+    "SOL": 0.8,     # SOL波动大，严格限制80%
+}
+# 合约仓位上限（更保守）
+SWAP_POSITION_CAP_PCT = {
+    "TRX_SWAP": 0.6,
+    "ETH_SWAP": 0.5,
+    "SOL_SWAP": 0.4,
+}
+
+# ── 单币种止损 ───────────────────────────────────────────────
+# 未实现亏损（含浮亏）超过该币种 initial_capital 的此比例时强制退出
+COIN_STOP_LOSS_PCT = 0.15  # 15%
 
 # ── SOL 专属行情判定（比通用参数更敏感，适配 SOL 高波动）──
 SOL_REGIME = {
