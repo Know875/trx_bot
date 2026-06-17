@@ -32,6 +32,8 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
         self.coin = "TRX_SWAP"
         self._ct_val = None
         self._tracker = tracker  # 用于记录大平仓PnL到tracker
+        # 用 coin 专属 logger，避免基类共享 logger 串台到 bot_TRX.log
+        self._log = logger
         # 合约网格特有追踪
         self._pending_long  = []   # 现货版没有的多头待平仓列表
         self._pending_short = []   # 现货版没有的空头待平仓列表

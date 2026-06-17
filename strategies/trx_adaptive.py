@@ -4,6 +4,7 @@ TRX 现货自适应策略
 继承 BaseAdaptiveStrategy，只覆写现货交易接口。
 状态机、网格逻辑、趋势逻辑全部由基类提供。
 """
+import math
 import logging
 
 import config
@@ -19,6 +20,17 @@ class TRXAdaptiveStrategy(BaseAdaptiveStrategy):
         super().__init__(client, capital)
         self.coin = "TRX"
         self._size_decimals = size_decimals
+        # 用 coin 专属 logger，避免基类共享 logger 串台到其他币种文件
+        self._log = logger
+
+    def _fee_adjust_sell_size(self, size):
+        """现货：买单成交后到手 base 币 = size×(1-fee)，卖单需相应缩量，
+        否则超卖导致 'balance insufficient'。保守用 0.999 并向下取整到精度。"""
+        adjusted = size * 0.999
+        if self._size_decimals == 0:
+            return math.floor(adjusted)
+        factor = 10 ** self._size_decimals
+        return math.floor(adjusted * factor) / factor
 
     # ══════════════════════════════════════════════════
     # 现货特性

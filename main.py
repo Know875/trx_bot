@@ -402,8 +402,10 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
     log_path = Path(__file__).parent / f"bot_{ccy}.log"
     # 把策略子模块日志路由到各币种文件
-    # trx_adaptive 是 TRX 独有 logger，可安全路由；trend 是共享 logger 不路由（避免交叉）
-    extra_loggers = ["trx_adaptive", "base_adaptive"] if ccy == "TRX" else []
+    # trx_adaptive 是 TRX 独有 logger，可安全路由；base_adaptive 是现货/合约共享 logger，
+    # 不能路由（否则会同时写入 bot_TRX.log 和 bot_TRX_SWAP.log 造成串台/双写）——
+    # 基类已改用各子类 coin 专属 logger（self._log）输出，故此处只路由 trx_adaptive。
+    extra_loggers = ["trx_adaptive"] if ccy == "TRX" else []
     logger   = _make_file_logger(f"bot.{ccy}", log_path, also_route=extra_loggers)
     logger.info(f"=== {ccy} 策略线程启动 ===")
 
@@ -591,6 +593,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                                     trx_strat.start(new_regime, price,
                                                     capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                     indicators=indicators)
+                                    _LAST_GRID_REBUILD[ccy] = now  # 重置停滞计时，防启动后立即误判重组
                                     logger.info(f"TRX 自适应策略启动: {new_regime}（仓位×{_sg_mult * _guard_cap_mult:.0%}）")
                             else:
                                 logger.info("TRX 行情不明朗或策略受限，空仓等待")
@@ -602,8 +605,11 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             trx_strat.start(new_regime, price,
                                             capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                             indicators=indicators)
+                            _LAST_GRID_REBUILD[ccy] = now  # 重置停滞计时
 
-                    # 网格停滞检测：运行中但长时间无成交 → 强制重组
+                    # 网格停滞检测：运行中但长时间「无成交」→ 强制重组。
+                    # 计时基准 = 上次成交/启动（见 on_tick 成交后刷新），不是上次重组，
+                    # 否则健康活跃的网格也会每 6h 被强制 stop+rebuild。
                     STAGNATION_HOURS = 6  # 超过6h无成交视为停滞
                     last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
                     if trx_strat and trx_strat.running and (now - last_rebuild) > STAGNATION_HOURS * 3600:
@@ -850,6 +856,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 pnl = trx_strat.on_tick(price, indicators=indicators)
                 if pnl != 0:
                     tracker.record(pnl, "trx_adaptive")
+                    _LAST_GRID_REBUILD[ccy] = now  # 有成交→刷新停滞计时基准，活跃网格不被误判
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
             elif not is_trx and current_strategy:
                 name, strat = current_strategy
@@ -916,8 +923,9 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
     size_dec        = coin_cfg["size_decimals"]
 
     log_path = Path(__file__).parent / f"bot_{ccy}.log"
-    # trx_adaptive_futures 是 TRX_SWAP 独有 logger；futures_trend 是共享的不路由
-    extra_loggers = ["trx_adaptive_futures", "base_adaptive"] if ccy == "TRX_SWAP" else []
+    # trx_adaptive_futures 是 TRX_SWAP 独有 logger；base_adaptive 是共享 logger 不路由
+    # （否则与 bot_TRX.log 串台/双写）——基类已改用各子类 coin 专属 logger 输出。
+    extra_loggers = ["trx_adaptive_futures"] if ccy == "TRX_SWAP" else []
     logger   = _make_file_logger(f"bot.{ccy}", log_path, also_route=extra_loggers)
     logger.info(f"=== {ccy} 合约策略线程启动 ===")
 
@@ -1123,6 +1131,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                                     trx_swap_strat.start(new_regime, price,
                                                          capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                          indicators=indicators)
+                                    _LAST_GRID_REBUILD[ccy] = now  # 重置停滞计时，防启动后立即误判重组
                                     logger.info(f"TRX_SWAP 自适应策略启动: {new_regime}（仓位×{_sg_mult * _guard_cap_mult:.0%})")
                             else:
                                 logger.info("TRX_SWAP 行情不明朗或策略受限，空仓等待")
@@ -1133,8 +1142,10 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                             trx_swap_strat.start(new_regime, price,
                                                  capital=initial_capital * _sg_mult * _guard_cap_mult * _ai_safety_mult,
                                                  indicators=indicators)
+                            _LAST_GRID_REBUILD[ccy] = now  # 重置停滞计时
 
-                    # 网格停滞检测（合约）：运行中但长时间无成交 → 强制重组
+                    # 网格停滞检测（合约）：运行中但长时间「无成交」→ 强制重组。
+                    # 计时基准 = 上次成交/启动（见 on_tick 成交后刷新），不是上次重组。
                     STAGNATION_HOURS = 6
                     if trx_swap_strat and trx_swap_strat.running:
                         try:
@@ -1368,6 +1379,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 pnl = trx_swap_strat.on_tick(price, indicators=indicators)
                 if pnl != 0:
                     tracker.record(pnl, "trx_adaptive_futures")
+                    _LAST_GRID_REBUILD[ccy] = now  # 有成交→刷新停滞计时基准
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
             elif not is_trx_swap and current_strategy:
                 name, strat = current_strategy

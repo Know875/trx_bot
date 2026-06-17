@@ -182,9 +182,14 @@ def can_evolve(entry: str = "unknown") -> tuple:
 # ═══════════════════════════════════════════════════════════
 
 def safe_write_config(coin: str, param: str, value, source: str = "unknown",
-                      old_value=None) -> bool:
+                      old_value=None, config_var: str = None) -> bool:
     """
     唯一的写入 config 入口。
+
+    param      —— 逻辑参数名（短名，如 grid_range_pct），用于冷却/回滚/审计 key。
+    config_var —— 实际要写入 config.py 的变量全名（如 SOL_SPOT_GRID_RANGE_PCT）。
+                  不传则回退用 param（brain 调用方本就传全名，保持兼容）。
+                  修复 P1-5：ai_tuner 传短名导致写到死变量 config.grid_range_pct。
 
     检查链:
       1. 手动锁
@@ -223,7 +228,7 @@ def safe_write_config(coin: str, param: str, value, source: str = "unknown",
         # 回滚快照通过 → 直接写入，跳过全局锁
         logger.info(f"✅ rollback 快照校验通过: {snap_detail}")
         _do_write(config, coin, param, value, source, old_value,
-                   extra_detail=snap_detail)
+                   extra_detail=snap_detail, config_var=config_var)
         return True
 
     # ── 全局锁（非回滚必须过） ──
@@ -270,15 +275,17 @@ def safe_write_config(coin: str, param: str, value, source: str = "unknown",
         return False
 
     # ── 实际写入 ──
-    return _do_write(config, coin, param, value, source, old_value)
+    return _do_write(config, coin, param, value, source, old_value, config_var=config_var)
 
 
-def _do_write(config, coin, param, value, source, old_value=None, extra_detail=None) -> bool:
-    """实际执行写入操作"""
+def _do_write(config, coin, param, value, source, old_value=None, extra_detail=None,
+              config_var=None) -> bool:
+    """实际执行写入操作。config_var 为真正的 config.py 变量名（缺省回退 param）。"""
+    target = config_var or param
     try:
-        setattr(config, param, value)
-        _update_config_file(param, value, old_value)
-        logger.info(f"✅ safe_write_config: {coin}.{param} = {value} (source={source})")
+        setattr(config, target, value)
+        _update_config_file(target, value, old_value)
+        logger.info(f"✅ safe_write_config: {coin}.{param} = {value} → config.{target} (source={source})")
         _log_write(source, coin, param, value, True, extra_detail)
         return True
     except Exception as e:

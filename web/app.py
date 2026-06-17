@@ -54,6 +54,10 @@ if not _AUTH_ENABLED:
 # 受保护的路径前缀（GET 只读接口除外，避免 dashboard 加载卡死）
 _PROTECTED_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 
+# 可匿名访问的非敏感 GET（存活探针 + 公开行情）。其余 GET 一律需认证，
+# 防止未登录/curl 直连读取持仓、余额、盈亏、订单等账户数据（P1-3）。
+_PUBLIC_GET_PREFIXES = ("/api/status", "/api/candles")
+
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -72,8 +76,9 @@ async def auth_middleware(request: Request, call_next):
     if method == "OPTIONS":
         return await call_next(request)
 
-    # GET 请求默认放行（只读监控），但 logs 路径需要认证（泄露策略信息）
-    if method == "GET" and not path.startswith("/api/logs"):
+    # GET：仅放行白名单内的非敏感只读接口（存活/公开行情）；其余 GET（持仓/盈亏/
+    # 订单/系统/日志）与写操作一样需认证，防未授权读取账户数据。
+    if method == "GET" and any(path.startswith(p) for p in _PUBLIC_GET_PREFIXES):
         return await call_next(request)
 
     if not path.startswith("/api/auth/login") and not _AUTH_ENABLED:

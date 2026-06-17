@@ -404,10 +404,13 @@ def _auto_apply_param(coin: str, param: str, old_val: float, new_val: float,
             logger.info(f"  📏 扩展安全区间 {coin}.{param}: {eff} → {wisdom_entry['effective_range']}")
 
     # 执行替换 — 必须走 safe_write_config（不允许绕过安全网）
+    # P1-5 修复：param 是短名（grid_range_pct），实际 config 变量是 var_name
+    # （如 SOL_SPOT_GRID_RANGE_PCT）。必须用 config_var 指定真正写入的变量，
+    # 否则会写到 config.py 里没人读的死变量 grid_range_pct，调参对实盘零生效。
     try:
         from evolution_lock import safe_write_config
         ok = safe_write_config(coin, param, new_val, source=f"ai_tuner.py",
-                                old_value=old_val)
+                                old_value=old_val, config_var=var_name)
         if not ok:
             return False, f"safe_write_config 拦截"
     except ImportError:
