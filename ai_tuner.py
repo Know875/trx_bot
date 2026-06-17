@@ -200,7 +200,7 @@ def _sweep_grid_for_prompt() -> str:
     返回 AI prompt 用的 Top 排名表格。"""
     try:
         from backtesting.engine import load_from_cache, calc_indicators
-        from optimize import optimize_grid, current_pnl
+        from brain import optimize_grid, current_pnl
     except ImportError:
         return "（优化模块不可用）"
 

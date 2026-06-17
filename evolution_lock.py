@@ -149,7 +149,7 @@ def can_evolve(entry: str = "unknown") -> tuple:
 
     # ── 极端行情 ──
     try:
-        from param_score import is_extreme_market
+        from brain import is_extreme_market
         extreme = is_extreme_market()
         if extreme.get("is_extreme"):
             triggers = "; ".join(extreme.get("reasons", ["unknown"]))
@@ -235,7 +235,7 @@ def safe_write_config(coin: str, param: str, value, source: str = "unknown",
 
     # ── 参数黑名单 ──
     try:
-        from param_score import is_on_cooldown
+        from brain import is_on_cooldown
         cooldown = is_on_cooldown(coin, param, value)
         if cooldown.get("on_cooldown") and not cooldown.get("can_override"):
             logger.warning(f"🚫 safe_write_config 拦截: {cooldown['reason']}")

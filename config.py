@@ -134,7 +134,7 @@ FUTURES_GRID_MAX_FLOAT_LOSS = {
 }
 
 # ── 各币种网格参数（180天回测调优）────────────────────────────
-ETH_SPOT_GRID_RANGE_PCT = 0.120  # was 0.162 → 0.120 回测提示收窄更贴近当前波动
+ETH_SPOT_GRID_RANGE_PCT = 0.162  # was 0.162 → 0.120 回测提示收窄更贴近当前波动
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70

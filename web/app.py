@@ -882,7 +882,7 @@ async def get_system_status():
 
     # Extreme market
     try:
-        from param_score import is_extreme_market
+        from brain import is_extreme_market
         extreme = is_extreme_market()
         result["extreme_market"] = extreme
     except Exception:
@@ -935,8 +935,8 @@ def _bg_get(name: str, fn, ttl: float) -> dict:
 
 def _measure_compute() -> dict:
     """跑 measure.run() 并瘦身（只留前端要的字段）。"""
-    import measure
-    raw = measure.run()
+    from system_status import run as _measure_run, _overall_reco
+    raw = _measure_run()
     out = {}
     for coin, r in raw.items():
         if coin == "_summary":
@@ -953,7 +953,7 @@ def _measure_compute() -> dict:
             "expectancy": p.get("expectancy"),
         }
     try:
-        out["_reco"] = measure._overall_reco(raw)
+        out["_reco"] = _overall_reco(raw)
     except Exception:
         out["_reco"] = ""
     return out
@@ -989,8 +989,8 @@ async def get_carry_positions():
 async def get_carry():
     """资金费率套利监控。后台计算 + 5min 缓存，接口秒回。"""
     def _compute():
-        import carry
-        return carry.scan_all()
+        from carry_executor import scan_all
+        return scan_all()
     job = _bg_get("carry", _compute, ttl=300)
     return {
         "computing": job["computing"] and job["data"] is None,
