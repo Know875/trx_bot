@@ -221,7 +221,7 @@ def _check_and_exit_orphan_spot(ccy: str, client, sguard, logger, tracker=None):
     try:
         # 只处理有永久禁用策略的情况，暂停/试用期不自动清仓
         has_disabled = any(
-            sguard.check(ccy, s)["mode"] == "disabled"
+            sguard.check(ccy, s, peek=True)["mode"] == "disabled"
             for s in StrategyGuard._get_coin_strategies(ccy)
         )
         if not has_disabled:
@@ -285,7 +285,7 @@ def _check_and_exit_orphan_swap(ccy: str, client, sguard, logger, tracker=None):
     global _orphan_alerted
     try:
         has_disabled = any(
-            sguard.check(ccy, s)["mode"] == "disabled"
+            sguard.check(ccy, s, peek=True)["mode"] == "disabled"
             for s in StrategyGuard._get_coin_strategies(ccy)
         )
         if not has_disabled:

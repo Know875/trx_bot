@@ -257,7 +257,7 @@ def safe_write_config(coin: str, param: str, value, source: str = "unknown",
         strats = ALL_STRATEGIES.get(coin, [])
         all_paused = True
         for sname in strats:
-            r = sg.check(coin, sname)
+            r = sg.check(coin, sname, peek=True)  # 写参 gate 只读检查，不推进策略状态机
             if r["allowed"]:
                 all_paused = False
                 break

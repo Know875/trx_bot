@@ -106,10 +106,14 @@ class StrategyGuard:
     # ═══════════════════════════════════════════════════════
 
     @_synchronized
-    def check(self, coin: str, strategy: str) -> dict:
+    def check(self, coin: str, strategy: str, peek: bool = False) -> dict:
         """
         每次策略决策前调用。
         返回 {'allowed': bool, 'mode': str, 'position_mult': float, 'reason': str}
+
+        peek=True：只读评估当前生效状态，不推进状态机/不写库（P1-4）。
+        用于 status()/has_active()/web 面板/外部 gate 检查，避免"看一眼面板"
+        就把策略推进试运行甚至永久禁用。状态机推进只由主交易循环(peek=False)驱动。
         """
         key = self._key(coin, strategy)
         now = datetime.now(timezone.utc)
@@ -129,33 +133,33 @@ class StrategyGuard:
             probation_until = datetime.fromisoformat(probation_until_str.replace("Z", "+00:00"))
             if now < probation_until:
                 remaining_h = (probation_until - now).total_seconds() / 3600
-                result["allowed"] = True
-                result["mode"] = "probation"
-                result["position_mult"] = PROBATION_POSITION
-                result["reason"] = f"试运行中 ({PROBATION_POSITION:.0%}仓位)，剩余 {remaining_h:.1f}h"
-                return result
+                return {"allowed": True, "mode": "probation",
+                        "position_mult": PROBATION_POSITION,
+                        "reason": f"试运行中 ({PROBATION_POSITION:.0%}仓位)，剩余 {remaining_h:.1f}h"}
             else:
-                # 试运行到期 → 评估
+                # 试运行到期 → 评估（评分<40禁用；否则恢复正常）
                 last_score = self._db.get_json("last_score", {})
                 last = last_score.get(key)
-                del probation[key]
-                self._db.set_json("probation_until", probation)
                 if last is not None and last < SCORE_PAUSE_24H:
-                    disabled[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
-                    self._db.set_json("disabled", disabled)
+                    if not peek:
+                        del probation[key]
+                        self._db.set_json("probation_until", probation)
+                        disabled[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
+                        self._db.set_json("disabled", disabled)
                     return {"allowed": False, "mode": "disabled", "position_mult": 0,
                             "reason": f"试运行失败: 评分{last}<{SCORE_PAUSE_24H}，已永久禁用"}
-                elif last is not None and last >= PROBATION_PASS_SCORE:
+                # 通过/观察 → 恢复正常（cb 归零后即落入 normal，等价于原 fall-through）
+                if not peek:
+                    del probation[key]
+                    self._db.set_json("probation_until", probation)
                     cb = self._db.get_json("consecutive_bad", {})
                     cb[key] = 0
                     self._db.set_json("consecutive_bad", cb)
-                    logger.info(f"✅ {key} 试运行通过 (评分{last})，恢复正常")
-                else:
-                    cb = self._db.get_json("consecutive_bad", {})
-                    cb[key] = 0
-                    self._db.set_json("consecutive_bad", cb)
-                    logger.info(f"👀 {key} 试运行结束 (评分{last})，恢复但仍需观察")
-                # fall through to normal
+                    if last is not None and last >= PROBATION_PASS_SCORE:
+                        logger.info(f"✅ {key} 试运行通过 (评分{last})，恢复正常")
+                    else:
+                        logger.info(f"👀 {key} 试运行结束 (评分{last})，恢复但仍需观察")
+                return result
 
         # ── 3. 暂停期 ──
         paused = self._db.get_json("paused_until", {})
@@ -168,12 +172,13 @@ class StrategyGuard:
                         "reason": f"策略暂停中，剩余 {remaining_h:.1f}h"}
             else:
                 # 暂停到期 → 进入试运行
-                del paused[key]
-                self._db.set_json("paused_until", paused)
-                probation_until = now + timedelta(hours=PROBATION_HOURS)
-                probation[key] = probation_until.isoformat()
-                self._db.set_json("probation_until", probation)
-                logger.info(f"🔄 {key} 暂停到期，进入 {PROBATION_HOURS}h 试运行 ({PROBATION_POSITION:.0%}仓位)")
+                if not peek:
+                    del paused[key]
+                    self._db.set_json("paused_until", paused)
+                    probation_until = now + timedelta(hours=PROBATION_HOURS)
+                    probation[key] = probation_until.isoformat()
+                    self._db.set_json("probation_until", probation)
+                    logger.info(f"🔄 {key} 暂停到期，进入 {PROBATION_HOURS}h 试运行 ({PROBATION_POSITION:.0%}仓位)")
                 return {"allowed": True, "mode": "probation", "position_mult": PROBATION_POSITION,
                         "reason": f"恢复试运行 ({PROBATION_POSITION:.0%}仓位)，{PROBATION_HOURS}h 后评估"}
 
@@ -182,10 +187,11 @@ class StrategyGuard:
         cb_val = cb.get(key, 0)
 
         if cb_val >= CONSECUTIVE_DISABLE:
-            disabled[key] = f"连续{cb_val}天评分<{SCORE_PAUSE_24H}，自动禁用"
-            self._db.set_json("disabled", disabled)
-            cb[key] = 0
-            self._db.set_json("consecutive_bad", cb)
+            if not peek:
+                disabled[key] = f"连续{cb_val}天评分<{SCORE_PAUSE_24H}，自动禁用"
+                self._db.set_json("disabled", disabled)
+                cb[key] = 0
+                self._db.set_json("consecutive_bad", cb)
             return {"allowed": False, "mode": "disabled", "position_mult": 0,
                     "reason": f"连续{cb_val}天低评分，已禁用"}
 
@@ -198,14 +204,16 @@ class StrategyGuard:
         last = last_score.get(key)
 
         if last is not None and last < SCORE_PAUSE_72H:
-            paused[key] = (now + timedelta(hours=72)).isoformat()
-            self._db.set_json("paused_until", paused)
+            if not peek:
+                paused[key] = (now + timedelta(hours=72)).isoformat()
+                self._db.set_json("paused_until", paused)
             return {"allowed": False, "mode": "paused", "position_mult": 0,
                     "reason": f"评分{last}<{SCORE_PAUSE_72H}，暂停72h"}
 
         if last is not None and last < SCORE_PAUSE_24H:
-            paused[key] = (now + timedelta(hours=24)).isoformat()
-            self._db.set_json("paused_until", paused)
+            if not peek:
+                paused[key] = (now + timedelta(hours=24)).isoformat()
+                self._db.set_json("paused_until", paused)
             return {"allowed": False, "mode": "paused", "position_mult": 0,
                     "reason": f"评分{last}<{SCORE_PAUSE_24H}，暂停24h"}
 
@@ -258,7 +266,7 @@ class StrategyGuard:
 
     def has_active(self, coin: str) -> bool:
         for strat in ALL_STRATEGIES.get(coin, []):
-            if self.check(coin, strat)["allowed"]:
+            if self.check(coin, strat, peek=True)["allowed"]:
                 return True
         return False
 
@@ -274,7 +282,7 @@ class StrategyGuard:
         for coin, strats in ALL_STRATEGIES.items():
             for strat in strats:
                 key = self._key(coin, strat)
-                res = self.check(coin, strat)
+                res = self.check(coin, strat, peek=True)  # 只读：看状态不推进状态机
                 mode = res["mode"]
                 counts[mode] = counts.get(mode, 0) + 1
 

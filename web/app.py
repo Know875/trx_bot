@@ -879,7 +879,7 @@ async def get_system_status():
                 continue
             coin_status = {}
             for sname in strats:
-                r = sg.check(coin, sname)
+                r = sg.check(coin, sname, peek=True)  # 面板只读：不触发策略状态机推进
                 coin_status[sname] = r
             result["strategy_guard"][coin] = coin_status
     except Exception:
