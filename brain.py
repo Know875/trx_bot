@@ -14,7 +14,7 @@
   python brain.py status       # 查看进化状态
 """
 
-import json, os, sys, time, logging
+import json, os, re, sys, time, logging
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from pathlib import Path
@@ -1021,9 +1021,7 @@ Optuna(TPE) 在连续区间内智能采样，用更少的回测次数找到更�
   res["top"]          -> [{grid_width,grid_levels,pnl_pct,win_rate,total_trades}, ...]
   res["method"]       -> "optuna" | "sweep"
 """
-import logging
-
-logger = logging.getLogger("optimize")
+_opt_logger = logging.getLogger("optimize")
 
 # 各币种搜索区间（width 价格比例 / levels 网格层数）
 GRID_RANGES = {
@@ -1184,9 +1182,9 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
     if n < window_bars * 3:
         # fallback: 用更小的窗口
         window_bars = n // 3
-        logger.info(f"{coin}: 数据不足 ({n} bars)，自动缩小窗口到 {window_bars} bars")
+        _opt_logger.info(f"{coin}: 数据不足 ({n} bars)，自动缩小窗口到 {window_bars} bars")
     if n < 180:  # 最少需要 3 小时数据
-        logger.warning(f"{coin}: 数据不足（{n} bars），至少需要 180")
+        _opt_logger.warning(f"{coin}: 数据不足（{n} bars），至少需要 180")
         return None
 
     rng = GRID_RANGES.get(coin, _DEFAULT_RANGE)
@@ -1199,6 +1197,14 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
     param_votes = []  # 每窗的最佳参数
 
     step = window_bars // 2  # 半窗步长 → 窗口有重叠
+
+    # 检测 optuna 是否可用（一次）并静默日志
+    try:
+        import optuna as _optuna_mod
+        _optuna_mod.logging.set_verbosity(_optuna_mod.logging.WARNING)
+        _optuna_available = True
+    except ImportError:
+        _optuna_available = False
 
     for start in range(0, n - window_bars * 2, step):
         train_end = start + window_bars
@@ -1213,8 +1219,8 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
 
         # ── 在 train 上优化 ──
         try:
-            import optuna
-            optuna.logging.set_verbosity(optuna.logging.WARNING)
+            if not _optuna_available:
+                raise ImportError
 
             def objective(trial):
                 w = trial.suggest_float("grid_width", w_lo, w_hi)
@@ -1222,9 +1228,9 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
                 r = simulate_grid(train_ind, grid_width=w, grid_levels=lv)
                 return _score(r)
 
-            study = optuna.create_study(
+            study = _optuna_mod.create_study(
                 direction="maximize",
-                sampler=optuna.samplers.TPESampler(seed=42),
+                sampler=_optuna_mod.samplers.TPESampler(seed=start),
             )
             study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
             best_params = {
@@ -1273,15 +1279,16 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
     avg_oos = sum(oos_scores) / len(oos_scores) if oos_scores else 0
 
     # ── 稳健参数：多窗口都靠谱的 ──
+    stable_best_count = 0
     if param_votes:
         # 按样本外 PnL 加权投票
         stable_count = {}
         for w, lv, oos in param_votes:
-            key = f"{w:.3f}_{lv}"
+            key = (w, lv)
             stable_count[key] = stable_count.get(key, 0) + (1 if oos > 0 else 0)
         best_key = max(stable_count, key=stable_count.get)
-        best_w, best_lv = best_key.split("_")
-        stable_params = {"grid_width": float(best_w), "grid_levels": int(best_lv)}
+        stable_params = {"grid_width": best_key[0], "grid_levels": best_key[1]}
+        stable_best_count = stable_count[best_key]
     else:
         stable_params = per_window[0]["best_params"] if per_window else {}
 
@@ -1294,7 +1301,7 @@ def walk_forward_optimize(coin: str, ind=None, window_days: int = 30,
         "oos_pnl_pct": round(avg_oos, 2),
         "recommend": avg_oos > 0,  # 样本外真赚钱才推荐
         "stable_params": stable_params,
-        "stable_count": stable_count.get(best_key, 0) if param_votes else 0,
+        "stable_count": stable_best_count,
         "per_window": per_window,
     }
 
@@ -1306,9 +1313,9 @@ def _slice_ind(ind, start: int, end: int):
     for attr in ("close", "high", "low", "vol", "ema20", "ema60",
                  "bb_upper", "bb_lower", "bb_width", "atr", "rsi", "adx"):
         arr = getattr(ind, attr, None)
-        if arr is not None and len(arr) > end:
+        if arr is not None and len(arr) >= end:
             setattr(sliced, attr, arr[start:end])
-    if ind.regimes and len(ind.regimes) > end:
+    if ind.regimes and len(ind.regimes) >= end:
         sliced.regimes = ind.regimes[start:end]
     return sliced
 
@@ -1408,13 +1415,8 @@ def _cli_optimize():
   score < 20  → rollback (强制回滚)
 """
 
-import json, os, re, logging
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-ROOT = Path(__file__).parent
 SCORE_FILE = str(ROOT / "param_scores.json")
-logger = logging.getLogger("param_score")
+_score_logger = logging.getLogger("param_score")
 
 # ═══════════════════════════════════════════════════════════
 # ① 分币种回滚阈值
@@ -1472,7 +1474,7 @@ def calc_fee_ratio(coin: str, since_iso: str = None) -> dict:
             for line in f:
                 try:
                     last_ts = datetime.strptime(line[:19], "%Y-%m-%d %H:%M:%S")
-                except:
+                except ValueError:
                     pass
 
                 if since_dt and last_ts and last_ts < since_local:
@@ -1559,7 +1561,7 @@ def is_extreme_market() -> dict:
 
         client.close()
     except Exception as e:
-        logger.warning(f"极端行情检测失败: {e}")
+        _score_logger.warning(f"极端行情检测失败: {e}")
 
     return {"is_extreme": is_extreme, "reasons": reasons}
 
@@ -1626,7 +1628,7 @@ def add_cooldown(coin: str, param: str, value, rollback_reason=""):
         "reason": rollback_reason,
     }
     _save_scores(scores)
-    logger.info(f"  🚫 {key} 冷藏 {ROLLBACK_COOLDOWN_DAYS} 天")
+    _score_logger.info(f"  🚫 {key} 冷藏 {ROLLBACK_COOLDOWN_DAYS} 天")
 
 
 # ═══════════════════════════════════════════════════════════

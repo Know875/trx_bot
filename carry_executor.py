@@ -22,8 +22,10 @@ import time
 import json
 import math
 import logging
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -279,19 +281,7 @@ if __name__ == "__main__":
   python carry.py --alert 20.0       # 年化>20%时推TG
 """
 
-import sys
-import os
-import time
-import json
-import logging
-import argparse
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-logger = logging.getLogger("carry")
+_carry_logger = logging.getLogger("carry")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -347,7 +337,7 @@ def fetch_funding_rate(symbol: str) -> Optional[dict]:
             "funding_time": "",  # 这个接口不返回 method/maxRate
         }
     except Exception as e:
-        logger.warning(f"获取 {symbol} 费率失败: {e}")
+        _carry_logger.warning(f"获取 {symbol} 费率失败: {e}")
         return None
 
 
@@ -505,20 +495,8 @@ def scan_all() -> list[dict]:
 
 def send_tg_alert(msg: str):
     """发送 Telegram 告警"""
-    import httpx
-    try:
-        import config
-        token = getattr(config, "TG_BOT_TOKEN", "") or os.environ.get("TG_BOT_TOKEN", "")
-        chat_id = getattr(config, "TG_CHAT_ID", "") or os.environ.get("TG_CHAT_ID", "")
-        if not token or not chat_id:
-            return
-        httpx.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": msg},
-            timeout=10,
-        )
-    except Exception as e:
-        logger.warning(f"TG通知失败: {e}")
+    from notify import send_tg
+    send_tg(msg)
 
 
 def main():
@@ -541,7 +519,7 @@ def main():
             results = [r for r in results if args.coin.upper() in r["symbol"]]
 
         if not results:
-            logger.warning("无费率数据")
+            _carry_logger.warning("无费率数据")
             return
 
         if args.json:
@@ -586,18 +564,18 @@ def main():
                     msg_parts.append(f"{coin} 净年化 {r['annual_net_pct']:+.1f}%")
                 msg = "💰 资金费率套利机会:\n" + "\n".join(msg_parts)
                 send_tg_alert(msg)
-                logger.info(f"已推送 {len(alerts)} 条告警")
+                _carry_logger.info(f"已推送 {len(alerts)} 条告警")
 
     do_scan()
 
     if args.watch > 0:
-        logger.info(f"持续监控，间隔 {args.watch}s")
+        _carry_logger.info(f"持续监控，间隔 {args.watch}s")
         try:
             while True:
                 time.sleep(args.watch)
                 do_scan()
         except KeyboardInterrupt:
-            logger.info("监控停止")
+            _carry_logger.info("监控停止")
 
 
 def _cli_carry():

@@ -140,11 +140,11 @@ ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
 ETH_GRID_RANGE_PCT      = 0.12
 
-SOL_SPOT_GRID_RANGE_PCT = 0.046
+SOL_SPOT_GRID_RANGE_PCT = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
 SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
-SOL_GRID_RANGE_PCT      = 0.046  # was 0.04 → 0.046 回测确认 +2.422%
+SOL_GRID_RANGE_PCT      = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025

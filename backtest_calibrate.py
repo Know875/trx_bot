@@ -347,8 +347,11 @@ def analyze(coin: str) -> dict:
           f"  → {'亚洲更优' if asia_mean>non_asia_mean else '亚洲并不更优'}")
     if best_h is not None:
         print(f"     最佳时段 {best_h:02d}h({hour_mean[best_h]*100:+.4f}%) / 最差 {worst_h:02d}h({hour_mean[worst_h]*100:+.4f}%)")
-    print(f"  ③ 最优网格(扣成本)={grid_net:+.2f}% vs 买入持有={buy_hold:+.2f}%"
-          f"  → 网格{'跑赢' if (grid_net or -9)>buy_hold else '跑输'}持有")
+    if grid_net is not None:
+        print(f"  ③ 最优网格(扣成本)={grid_net:+.2f}% vs 买入持有={buy_hold:+.2f}%"
+              f"  → 网格{'跑赢' if grid_net > buy_hold else '跑输'}持有")
+    else:
+        print(f"  ③ 最优网格: 无足够数据  买入持有={buy_hold:+.2f}%")
     if trend_net is not None:
         print(f"  ④ 趋势策略(扣成本)={trend_net:+.2f}% vs 买入持有={buy_hold:+.2f}%"
               f"  → 趋势{'跑赢' if trend_net>buy_hold else '跑输'}持有")
