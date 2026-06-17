@@ -64,8 +64,8 @@ class TRXAdaptiveFuturesStrategy(BaseAdaptiveStrategy):
     def _place_order(self, side, price, size, order_type="limit"):
         return self.client.place_futures_order(side, size, order_type=order_type, price=price)
 
-    def _place_market_order(self, side, size):
-        return self.client.place_futures_order(side, size, order_type="market")
+    def _place_market_order(self, side, size, reduce_only=False):
+        return self.client.place_futures_order(side, size, order_type="market", reduce_only=reduce_only)
 
     def _cancel_order(self, order_id):
         return self.client.cancel_order(order_id)

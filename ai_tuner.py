@@ -465,12 +465,15 @@ def _counterfactual_analysis(coin: str, param: str, old_val: float, new_val: flo
     if param == "grid_range_pct":
         # 更窄的网格 → 更快的止损/止盈，可能减少单笔亏损但增加频率
         # 更宽的网格 → 更多的价格波动容忍度，减少被迫止损
+        # 注意：以下为粗略线性外推，非回测实测，仅供定性参考（避免误导决策）
         if new_val > old_val:
             avoid_pct = min(abs(new_val - old_val) / old_val, 0.3)
             avoided = total_loss * avoid_pct
-            return f"扩大网格后，最近 5 笔亏损约 {total_loss:+.2f}，预估可减少 {abs(avoided):.2f} 损失"
+            return (f"[粗略推测·非回测] 扩大网格后，最近 5 笔亏损约 {total_loss:+.2f}，"
+                    f"定性上可能减少约 {abs(avoided):.2f} 损失（仅参考，以回测 verdict 为准）")
         else:
-            return f"缩小网格后，持仓时间缩短，最近 5 笔亏损可能更早止损，减少 {abs(total_loss * 0.15):.2f}"
+            return (f"[粗略推测·非回测] 缩小网格后持仓时间缩短，最近 5 笔亏损或更早止损，"
+                    f"定性上或减少约 {abs(total_loss * 0.15):.2f}（仅参考，以回测 verdict 为准）")
 
     return None
 

@@ -70,6 +70,13 @@ class StrategyGuard:
     def _key(self, coin: str, strategy: str) -> str:
         return f"{coin}:{strategy}"
 
+    def _clear_probation_entry(self, key: str):
+        """清除试运行评分基准（离开试运行时调用）"""
+        pe = self._db.get_json("probation_entry", {})
+        if key in pe:
+            pe.pop(key, None)
+            self._db.set_json("probation_entry", pe)
+
     @_synchronized
     def update_score(self, coin: str, strategy: str, score: int):
         """由 strategy_report 每日调用，更新评分"""
@@ -137,13 +144,23 @@ class StrategyGuard:
                         "position_mult": PROBATION_POSITION,
                         "reason": f"试运行中 ({PROBATION_POSITION:.0%}仓位)，剩余 {remaining_h:.1f}h"}
             else:
-                # 试运行到期 → 评估（评分<40禁用；否则恢复正常）
+                # 试运行到期 → 评估。先确认有「新评分」，否则不能用过期评分裁决(P2-2)。
                 last_score = self._db.get_json("last_score", {})
                 last = last_score.get(key)
-                if last is not None and last < SCORE_PAUSE_24H:
+                entry = self._db.get_json("probation_entry", {}).get(key)
+                if last is None or last == entry:
+                    # 进入试运行以来评分未更新 → 顺延，避免拿旧低分误判禁用
+                    if not peek:
+                        probation[key] = (now + timedelta(hours=PROBATION_HOURS)).isoformat()
+                        self._db.set_json("probation_until", probation)
+                        logger.info(f"⏳ {key} 试运行期内无新评分，顺延 {PROBATION_HOURS}h 再评估")
+                    return {"allowed": True, "mode": "probation", "position_mult": PROBATION_POSITION,
+                            "reason": f"试运行顺延（待新评分），{PROBATION_HOURS}h 后再评估"}
+                if last < SCORE_PAUSE_24H:
                     if not peek:
                         del probation[key]
                         self._db.set_json("probation_until", probation)
+                        self._clear_probation_entry(key)
                         disabled[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
                         self._db.set_json("disabled", disabled)
                     return {"allowed": False, "mode": "disabled", "position_mult": 0,
@@ -152,10 +169,11 @@ class StrategyGuard:
                 if not peek:
                     del probation[key]
                     self._db.set_json("probation_until", probation)
+                    self._clear_probation_entry(key)
                     cb = self._db.get_json("consecutive_bad", {})
                     cb[key] = 0
                     self._db.set_json("consecutive_bad", cb)
-                    if last is not None and last >= PROBATION_PASS_SCORE:
+                    if last >= PROBATION_PASS_SCORE:
                         logger.info(f"✅ {key} 试运行通过 (评分{last})，恢复正常")
                     else:
                         logger.info(f"👀 {key} 试运行结束 (评分{last})，恢复但仍需观察")
@@ -178,6 +196,10 @@ class StrategyGuard:
                     probation_until = now + timedelta(hours=PROBATION_HOURS)
                     probation[key] = probation_until.isoformat()
                     self._db.set_json("probation_until", probation)
+                    # 记录进入试运行时的评分基准，到期据此判断是否有新评分(P2-2)
+                    pe = self._db.get_json("probation_entry", {})
+                    pe[key] = self._db.get_json("last_score", {}).get(key)
+                    self._db.set_json("probation_entry", pe)
                     logger.info(f"🔄 {key} 暂停到期，进入 {PROBATION_HOURS}h 试运行 ({PROBATION_POSITION:.0%}仓位)")
                 return {"allowed": True, "mode": "probation", "position_mult": PROBATION_POSITION,
                         "reason": f"恢复试运行 ({PROBATION_POSITION:.0%}仓位)，{PROBATION_HOURS}h 后评估"}
@@ -236,6 +258,7 @@ class StrategyGuard:
         probation = self._db.get_json("probation_until", {})
         probation.pop(key, None)
         self._db.set_json("probation_until", probation)
+        self._clear_probation_entry(key)
         cb = self._db.get_json("consecutive_bad", {})
         cb[key] = 0
         self._db.set_json("consecutive_bad", cb)

@@ -187,7 +187,9 @@ class BaseAdaptiveStrategy:
     def _place_order(self, side, price, size, order_type="limit"):
         raise NotImplementedError
 
-    def _place_market_order(self, side, size):
+    def _place_market_order(self, side, size, reduce_only=False):
+        """市价单。reduce_only=True 用于平仓（合约设 reduceOnly 防反向开仓）；
+        开仓传 False。现货子类忽略此标志。"""
         raise NotImplementedError
 
     def _cancel_order(self, order_id):
@@ -703,7 +705,7 @@ class BaseAdaptiveStrategy:
                 if partial > 0:
                     close_side = "sell" if d == "up" else "buy"
                     try:
-                        self._place_market_order(close_side, partial)
+                        self._place_market_order(close_side, partial, reduce_only=True)
                         gain = self._calc_pnl(partial, self._entry_price, current_price, d)
                         pnl += gain
                         self._position -= partial
@@ -732,7 +734,7 @@ class BaseAdaptiveStrategy:
             return 0.0
         self._cancel_algo_orders()
         try:
-            self._place_market_order("sell" if self._trend_dir == "up" else "buy", self._position)
+            self._place_market_order("sell" if self._trend_dir == "up" else "buy", self._position, reduce_only=True)
         except Exception as e:
             self._log.error(f"[趋势] 平仓失败: {e}")
             return 0.0

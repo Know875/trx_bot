@@ -23,15 +23,45 @@
   safe_write_config(coin, param, value, source="brain.py")  # 不调用这个就写不进去
 """
 
-import json, os, logging
+import json, os, time, logging, contextlib
 from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 LOCK_FILE = str(ROOT / "evolution_lock.json")
 MANUAL_LOCK_FILE = str(ROOT / ".evolution_manual_lock")
+_WRITE_LOCK_DIR = str(ROOT / ".evolution_write.lock")  # 跨进程写锁（mkdir 原子）
 
 logger = logging.getLogger("evolution_lock")
+
+
+@contextlib.contextmanager
+def _file_lock(timeout: float = 10.0, poll: float = 0.1):
+    """跨进程互斥写锁（基于 os.mkdir 的原子性，跨平台）。
+    保护 config.py / evolution_lock.json 的「读-改-写」，防 bot 主进程与
+    brain/ai_tuner 的 cron 进程并发写互相覆盖、丢更新。
+    超时未取到锁则记录告警后仍继续（宁可写也不死锁，写操作本就低频）。"""
+    acquired = False
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            os.mkdir(_WRITE_LOCK_DIR)
+            acquired = True
+            break
+        except FileExistsError:
+            time.sleep(poll)
+        except Exception:
+            break  # 异常文件系统，别卡死
+    if not acquired:
+        logger.warning("⚠️ 获取写锁超时/失败，继续执行（可能有并发写或残留锁目录）")
+    try:
+        yield
+    finally:
+        if acquired:
+            try:
+                os.rmdir(_WRITE_LOCK_DIR)
+            except Exception:
+                pass
 
 # ═══════════════════════════════════════════════════════════
 # 手动锁
@@ -83,52 +113,53 @@ def _load_lock_log():
     return {"blocks": [], "writes": [], "state": "normal"}
 
 def _save_lock_log(data):
-    tmp = LOCK_FILE + ".tmp"
+    tmp = LOCK_FILE + f".{os.getpid()}.tmp"  # 进程独立 tmp，避免并发 tmp 互踩
     with open(tmp, "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False, default=str)
     os.replace(tmp, LOCK_FILE)
 
 def _log_block(entry: str, reason: str, trigger: str, allowed_actions: list, detail: dict = None):
     """统一封锁日志格式"""
-    data = _load_lock_log()
-    record = {
-        "event": "EVOLUTION_BLOCKED",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "reason": reason,
-        "trigger": trigger,
-        "entry": entry,
-        "allowed": allowed_actions,
-        "config_write": False,
-        "detail": detail or {},
-    }
-    data["blocks"].append(record)
-    # 只保留最近 100 条
-    if len(data["blocks"]) > 100:
-        data["blocks"] = data["blocks"][-100:]
-    data["state"] = "locked" if reason != "ok" else "normal"
-    _save_lock_log(data)
+    with _file_lock():  # 读-改-写原子，防并发丢审计记录
+        data = _load_lock_log()
+        record = {
+            "event": "EVOLUTION_BLOCKED",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "reason": reason,
+            "trigger": trigger,
+            "entry": entry,
+            "allowed": allowed_actions,
+            "config_write": False,
+            "detail": detail or {},
+        }
+        data["blocks"].append(record)
+        # 只保留最近 100 条
+        if len(data["blocks"]) > 100:
+            data["blocks"] = data["blocks"][-100:]
+        data["state"] = "locked" if reason != "ok" else "normal"
+        _save_lock_log(data)
 
     # 同时输出标准日志
-    reason_short = reason.replace("extreme_", "极端").replace("account_", "账户").replace("manual_", "人工")
     msg = (f"EVOLUTION_BLOCKED reason={reason} entry={entry} trigger={trigger} "
            f"allowed={','.join(allowed_actions[:3])} config_write=false")
     logger.warning(f"🚫 {msg}")
 
 def _log_write(entry: str, coin: str, param: str, value: str, success: bool, detail: dict = None):
-    data = _load_lock_log()
-    data["writes"].append({
-        "event": "CONFIG_WRITE" if success else "CONFIG_WRITE_BLOCKED",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "entry": entry,
-        "coin": coin,
-        "param": param,
-        "value": str(value),
-        "success": success,
-        "detail": detail or {},
-    })
-    if len(data["writes"]) > 100:
-        data["writes"] = data["writes"][-100:]
-    _save_lock_log(data)
+    with _file_lock():  # 读-改-写原子，防并发丢审计记录
+        data = _load_lock_log()
+        data["writes"].append({
+            "event": "CONFIG_WRITE" if success else "CONFIG_WRITE_BLOCKED",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "entry": entry,
+            "coin": coin,
+            "param": param,
+            "value": str(value),
+            "success": success,
+            "detail": detail or {},
+        })
+        if len(data["writes"]) > 100:
+            data["writes"] = data["writes"][-100:]
+        _save_lock_log(data)
 
 # ═══════════════════════════════════════════════════════════
 # ① 第一道门: can_evolve()
@@ -380,37 +411,34 @@ def _param_matches(e_param: str, target_param: str, coin: str) -> bool:
 
 
 def _update_config_file(param: str, value, old_value=None):
-    """实际修改 config.py 文件内容"""
+    """实际修改 config.py 文件内容（读-改-写全程持跨进程写锁，防并发丢更新）"""
     config_path = str(ROOT / "config.py")
 
-    with open(config_path) as f:
-        content = f.read()
-
     import re
-    # 匹配 config.py 中的变量赋值
-    pattern = re.compile(rf"^({param}\s*=\s*)(.+?)(\s*#.*)?$", re.MULTILINE)
-
     new_val = str(value) if not isinstance(value, str) else f'"{value}"'
     if isinstance(value, float):
         new_val = str(value)
     elif isinstance(value, int):
         new_val = str(value)
 
-    if pattern.search(content):
-        new_content = pattern.sub(rf"\g<1>{new_val}\g<3>", content)
-    else:
-        # 变量不存在，追加
-        if old_value is not None:
-            comment = f"  # was {old_value}"
-        else:
-            comment = ""
-        new_content = content.rstrip() + f"\n{param} = {new_val}{comment}\n"
+    with _file_lock():
+        with open(config_path) as f:
+            content = f.read()
 
-    # 原子写入
-    tmp_path = config_path + ".tmp"
-    with open(tmp_path, "w") as f:
-        f.write(new_content)
-    os.replace(tmp_path, config_path)
+        # 匹配 config.py 中的变量赋值
+        pattern = re.compile(rf"^({param}\s*=\s*)(.+?)(\s*#.*)?$", re.MULTILINE)
+        if pattern.search(content):
+            new_content = pattern.sub(rf"\g<1>{new_val}\g<3>", content)
+        else:
+            # 变量不存在，追加
+            comment = f"  # was {old_value}" if old_value is not None else ""
+            new_content = content.rstrip() + f"\n{param} = {new_val}{comment}\n"
+
+        # 原子写入（进程独立 tmp，避免并发 tmp 互踩）
+        tmp_path = config_path + f".{os.getpid()}.tmp"
+        with open(tmp_path, "w") as f:
+            f.write(new_content)
+        os.replace(tmp_path, config_path)
 
     # 注意：不在此处 importlib.reload(config)。
     # 跨进程（brain CLI）reload 对运行中的 bot 无效；同进程 reload 又会与

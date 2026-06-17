@@ -363,7 +363,7 @@ class OKXClient:
             raise RuntimeError(f"set_leverage error: {result['msg']}")
 
     @_retry()
-    def place_futures_order(self, side, size, order_type="market", price=None):
+    def place_futures_order(self, side, size, order_type="market", price=None, reduce_only=False):
         params = dict(
             instId=self.symbol,
             tdMode=config.FUTURES_MARGIN_MODE,
@@ -373,6 +373,10 @@ class OKXClient:
         )
         if order_type == "limit" and price is not None:
             params["px"] = str(price)
+        # 平仓单设 reduceOnly：仅减仓不反向开仓。防止止损单已触发后市价平仓
+        # 反而开出反方向新仓（net 模式下尤其危险）。
+        if reduce_only:
+            params["reduceOnly"] = "true"
         result = self.trade.place_order(**params)
         if result["code"] != "0":
             msg = result.get("data", [{}])[0].get("sMsg") or result.get("msg", str(result))

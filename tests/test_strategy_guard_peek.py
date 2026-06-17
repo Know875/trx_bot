@@ -92,3 +92,32 @@ def test_disabled_is_readonly_both_modes():
         r = sg.check("SOL", "trend", peek=pk)
         assert r["mode"] == "disabled"
         assert sg._db.writes == 0
+
+
+# ── P2-2：试运行到期无新评分 → 顺延，不拿过期评分裁决 ─────────────
+def test_probation_expired_no_new_score_extends_not_disable():
+    # 进入试运行时评分=30，到期时评分仍是30(未更新) → 不应禁用，应顺延
+    sg = _sg({"probation_until": {KEY: PAST},
+              "last_score": {KEY: 30},
+              "probation_entry": {KEY: 30}})
+    r = sg.check("SOL", "trend", peek=False)
+    assert r["mode"] == "probation"               # 顺延，仍在试运行
+    assert "disabled" not in sg._db.data          # 没有用过期低分禁用
+    assert KEY in sg._db.data["probation_until"]  # 试运行被续期
+
+def test_probation_expired_with_new_low_score_disables():
+    # 进入时基准50，到期时新评分30(已更新且<40) → 正常裁决为禁用
+    sg = _sg({"probation_until": {KEY: PAST},
+              "last_score": {KEY: 30},
+              "probation_entry": {KEY: 50}})
+    r = sg.check("SOL", "trend", peek=False)
+    assert r["mode"] == "disabled"
+    assert KEY in sg._db.data["disabled"]
+
+def test_probation_expired_no_new_score_peek_no_write():
+    sg = _sg({"probation_until": {KEY: PAST},
+              "last_score": {KEY: 30},
+              "probation_entry": {KEY: 30}})
+    r = sg.check("SOL", "trend", peek=True)
+    assert r["mode"] == "probation"
+    assert sg._db.writes == 0

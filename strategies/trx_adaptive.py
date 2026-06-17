@@ -46,7 +46,8 @@ class TRXAdaptiveStrategy(BaseAdaptiveStrategy):
     def _place_order(self, side, price, size, order_type="limit"):
         return self.client.place_order(side, price, size, order_type=order_type)
 
-    def _place_market_order(self, side, size):
+    def _place_market_order(self, side, size, reduce_only=False):
+        # 现货无 reduceOnly 概念（卖出即减持），忽略该标志
         ticker = self.client.get_ticker()
         price = float(ticker["last"])
         return self.client.place_order(side, price, size, order_type="market")

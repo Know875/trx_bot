@@ -694,66 +694,49 @@ def _record_param_change(coin, param, old_val, new_val, source="auto"):
 
 
 def _get_coin_pnl_since(coin: str, since_iso: str) -> dict:
-    """
-    从日志文件读取某币种在某个时间点之后的 PnL 表现。
-    返回 {net_pnl, pnl_pct, settled_count, total_trades}
-    
-    追踪器报表是多行格式，累计盈亏行不带时间戳。
-    我们记录每行最后一个有效时间戳，关联给后续的 PnL 行。
-    """
-    import re
-    log_file = ROOT / f"bot_{coin}.log"
-    if not log_file.exists():
-        return {"net_pnl": 0, "pnl_pct": 0, "settled_count": 0, "total_trades": 0, "error": "无日志"}
+    """从 trade_records_{coin}.json 读取某时间点后的已实现 PnL（P2-1）。
+    改用结构化交易记录，替代脆弱的「正则解析日志文本」——后者依赖日志格式、
+    时间戳排版，且与日志双写/串台耦合。返回 {net_pnl, pnl_pct, settled_count, total_trades}。
 
-    since_dt = datetime.fromisoformat(since_iso.replace("Z", "+00:00"))
-    since_local = (since_dt + timedelta(hours=8)).replace(tzinfo=None)
-
-    # 先找应用时间点的累计盈亏（快照）
-    snapshot_pnl = None
-    current_pnl = None
-    last_ts = None
+    时间口径：记录用进程本地时间(tracker datetime.now())；since_iso 为 UTC，
+    按 +8h 转本地比较（沿用项目既有的 UTC+8 假设；服务器时区非 UTC+8 时需同步调整）。
+    """
+    rec_file = ROOT / f"trade_records_{coin}.json"
+    if not rec_file.exists():
+        return {"net_pnl": 0, "pnl_pct": 0, "settled_count": 0, "total_trades": 0, "error": "无交易记录"}
+    try:
+        data = json.loads(rec_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        return {"net_pnl": 0, "pnl_pct": 0, "settled_count": 0, "total_trades": 0, "error": str(e)}
 
     try:
-        with open(log_file) as f:
-            for line in f:
-                # 尝试解析时间戳
-                try:
-                    ts_str = line[:19]
-                    last_ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-                except:
-                    pass  # 无时间戳的行沿用 last_ts
+        since_dt = datetime.fromisoformat(since_iso.replace("Z", "+00:00"))
+        since_local = (since_dt + timedelta(hours=8)).replace(tzinfo=None)
+    except Exception:
+        since_local = None
 
-                # 找累计盈亏（可以为缩进行）
-                m = re.search(r'累计盈亏:\s+([+-][\d.]+)\s*USDT', line)
-                if m:
-                    val = float(m.group(1))
-                    if last_ts is None or last_ts >= since_local:
-                        current_pnl = val
-                        if snapshot_pnl is None:
-                            snapshot_pnl = val  # 第一条 = 快照
+    net_pnl = 0.0
+    count = 0
+    for r in data.get("records", []):
+        if r.get("strategy") == "cleanup":   # 启动清理不计入策略表现
+            continue
+        if since_local is not None:
+            try:
+                t = datetime.strptime(r.get("time", ""), "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                continue
+            if t < since_local:
+                continue
+        net_pnl += float(r.get("pnl", 0) or 0)
+        count += 1
 
-    except Exception as e:
-        return {"net_pnl": 0, "pnl_pct": 0, "settled_count": 0, "error": str(e)}
-
-    if current_pnl is None:
-        return {"net_pnl": 0, "pnl_pct": 0, "settled_count": 0}
-
-    # 期间净 PnL = 当前累计 - 快照
-    net_pnl = current_pnl - (snapshot_pnl or 0)
-
-    base_capitals = {"TRX": 50, "ETH": 3000, "SOL": 4000, "TRX_SWAP": 60, "ETH_SWAP": 120, "SOL_SWAP": 40}
-    cap = base_capitals.get(coin, 50)
-    pnl_pct = net_pnl / cap * 100 if cap > 0 else 0
-
+    cap = config.COIN_CONFIG.get(coin, {}).get("initial_capital", 0) or 1
     return {
         "net_pnl": round(net_pnl, 3),
-        "pnl_pct": round(pnl_pct, 2),
-        "settled_count": 0,
+        "pnl_pct": round(net_pnl / cap * 100, 3),
+        "settled_count": count,
+        "total_trades": count,
         "capital_est": cap,
-        "total_trades": 0,
-        "snapshot": snapshot_pnl,
-        "current": current_pnl,
     }
 
 
