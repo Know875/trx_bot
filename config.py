@@ -53,36 +53,38 @@ COINS = ["TRX", "ETH", "SOL", "TRX_SWAP", "ETH_SWAP", "SOL_SWAP"]
 
 COIN_CONFIG = {
     # ── 现货 ──
+    # initial_capital：×2 扩大部署（原 29000 总额→58000），真实账户权益约 79688 USDT，
+    # 峰值占用约 3 万 / 75k（~40% 利用率，留充足缓冲）。稳定后可再上调。
     "TRX": {
         "symbol": "TRX-USDT", "mode": "spot",
-        "initial_capital": 5000.0, "size_decimals": 0, "min_order_size": 1,
+        "initial_capital": 10000.0, "size_decimals": 0, "min_order_size": 1,  # was 5000
     },
     "ETH": {
         "symbol": "ETH-USDT", "mode": "spot",
-        "initial_capital": 5000.0, "size_decimals": 4, "min_order_size": 0.001,
+        "initial_capital": 10000.0, "size_decimals": 4, "min_order_size": 0.001,  # was 5000
     },
     "SOL": {
         "symbol": "SOL-USDT", "mode": "spot",
-        "initial_capital": 6000.0, "size_decimals": 2, "min_order_size": 0.01,
+        "initial_capital": 12000.0, "size_decimals": 2, "min_order_size": 0.01,  # was 6000
     },
     # ── 合约（永续）──
     "TRX_SWAP": {
         "symbol": "TRX-USDT-SWAP", "mode": "futures",
-        "initial_capital": 4000.0, "base_ccy": "TRX",
+        "initial_capital": 8000.0, "base_ccy": "TRX",  # was 4000
         "ct_val": 1000.0,   # 每张合约面值（TRX）
         "size_decimals": 0, "min_order_size": 1,
         "leverage": 3,       # TRX 波动大，低杠杆
     },
     "ETH_SWAP": {
         "symbol": "ETH-USDT-SWAP", "mode": "futures",
-        "initial_capital": 4500.0, "base_ccy": "ETH",
+        "initial_capital": 9000.0, "base_ccy": "ETH",  # was 4500
         "ct_val": 0.01,     # 每张合约面值（ETH）
         "size_decimals": 4, "min_order_size": 0.001,
         "leverage": 5,       # ETH 波动中等
     },
     "SOL_SWAP": {
         "symbol": "SOL-USDT-SWAP", "mode": "futures",
-        "initial_capital": 4500.0, "base_ccy": "SOL",
+        "initial_capital": 9000.0, "base_ccy": "SOL",  # was 4500
         "ct_val": 1.0,      # 每张合约面值（SOL）
         "size_decimals": 2, "min_order_size": 0.01,
         "market_flag": "0", # 模拟盘 SOL-USDT-SWAP 价格失真，行情数据从实盘取
@@ -91,10 +93,11 @@ COIN_CONFIG = {
 }
 
 # ── 账户总本金（风控统一基准）─────────────────────────────────
-# 默认 = 各币种 initial_capital 之和；用环境变量 TOTAL_CAPITAL 覆盖为真实入金。
-# 账户级熔断 (account_guard) 与各处风控统一引用此值，避免口径不一致。
-TOTAL_CAPITAL = float(_env("TOTAL_CAPITAL",
-                           str(sum(c["initial_capital"] for c in COIN_CONFIG.values()))))
+# = 真实账户权益（模拟盘约 79688 USDT：可用 75086 + 持仓占用约 4603）。
+# 账户级熔断 (account_guard) 的日亏 2%/3.5%/5% 按此基准换算绝对金额，
+# 必须反映真实权益，否则阈值要么过敏感(偏小)要么形同虚设(偏大)。
+# 账户增减时请同步更新，或在服务器 .env 设 TOTAL_CAPITAL 覆盖此默认值。
+TOTAL_CAPITAL = float(_env("TOTAL_CAPITAL", "79688"))
 
 # ── 手续费率（用于盈亏结算，避免高估利润）──────────────────────
 # OKX 现货挂单(maker)约 0.08%，吃单(taker)约 0.10%；网格双边按 maker 估算。

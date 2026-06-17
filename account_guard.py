@@ -78,14 +78,15 @@ CONSECUTIVE_COOLDOWN_H = 2  # 冷却小时
 
 PER_COIN_BUDGET_RATIO = 0.40  # 单币种日亏超总预算 40% → 暂停
 
-# 各币种日预算（USDT）
+# 各币种日预算（USDT）—— 随 config initial_capital ×2 同步放大，保持比例一致，
+# 否则仓位翻倍后单币正常波动就超旧预算，导致频繁误暂停。
 COIN_DAILY_BUDGET = {
-    "TRX":      10,
-    "ETH":      25,
-    "SOL":      60,
-    "TRX_SWAP": 10,
-    "ETH_SWAP": 20,
-    "SOL_SWAP": 30,
+    "TRX":      20,   # was 10
+    "ETH":      50,   # was 25
+    "SOL":      120,  # was 60
+    "TRX_SWAP": 20,   # was 10
+    "ETH_SWAP": 40,   # was 20
+    "SOL_SWAP": 60,   # was 30
 }
 
 
