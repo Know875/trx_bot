@@ -37,6 +37,44 @@ GLOBAL_MACRO = {"risk_score": 0.5, "position_multiplier": 1.0}
 MACRO_CHECK_INTERVAL = 300  # 每5分钟更新宏观分析
 _LAST_GRID_REBUILD = {}  # ccy → timestamp: 网格重组时间（防停滞检测无限重启）
 
+
+def _timeit(store: dict, name: str, fn, *args, **kwargs):
+    """计时单次调用并累计到 store[name]，用于慢 tick 的阶段归因（见 tick 耗时告警）。"""
+    _t = time.time()
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        store[name] = store.get(name, 0.0) + (time.time() - _t)
+
+
+def _phase_breakdown(store: dict) -> str:
+    """把阶段耗时按降序拼成可读串；全部 <0.1s 时提示疑似锁/GIL 等待。"""
+    parts = [f"{k}={v:.1f}s" for k, v in sorted(store.items(), key=lambda x: -x[1]) if v >= 0.1]
+    return " ".join(parts) if parts else "各阶段均<0.1s（疑似锁/GIL/调度等待）"
+
+
+def _price_in_grid_band(strat, price):
+    """price 是否仍在当前网格区间内：True=带内, False=已漂出, None=无法判定。
+
+    用于带感知停滞重组——价格仍在带内只是行情清淡时，重组(同参数)无意义且白付
+    手续费，应跳过；只有价格漂出网格带（成交停滞的真正原因）才重组再锚。
+    grid/futures_grid 暴露 lower/upper；base_adaptive 自适应网格用 _grid_prices。
+    """
+    if strat is None or price is None:
+        return None
+    lo = getattr(strat, "lower", None)
+    hi = getattr(strat, "upper", None)
+    if lo is None or hi is None:
+        gp = getattr(strat, "_grid_prices", None)
+        if gp:
+            lo, hi = min(gp), max(gp)
+    if lo is None or hi is None:
+        return None
+    try:
+        return lo <= price <= hi
+    except TypeError:
+        return None
+
 def _update_macro():
     global GLOBAL_MACRO
     try:
@@ -430,6 +468,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
     while not stop_event.is_set():
         now = time.time()
         _tick_start = now     # tick 耗时监控起点
+        _phase = {}           # tick 内各阶段耗时归因（慢 tick 时打印）
         _ai_safety_mult = 1.0  # AI 安全系数：每 tick 重置，只能 ≤1.0
 
         # ── 全局熔断检查 ──────────────────────────────────
@@ -480,13 +519,13 @@ def run_coin(ccy: str, stop_event: threading.Event):
         # ── 定期重新识别行情 ──────────────────────────────────
         if now - last_regime_check > REGIME_INTERVAL:
             try:
-                raw = client.get_candles()
+                raw = _timeit(_phase, "candles", client.get_candles)
                 df  = parse_candles(raw)
                 new_regime, indicators = detect_regime(df, symbol=ccy)
                 new_regime = _apply_ml_regime(new_regime, df, ccy, logger)
-                ticker  = client.get_ticker()
+                ticker  = _timeit(_phase, "ticker", client.get_ticker)
                 price   = float(ticker["last"])
-                balance = client.get_balance("USDT")
+                balance = _timeit(_phase, "balance", client.get_balance, "USDT")
 
                 logger.info(
                     f"行情: {new_regime} | 价格: {price} | "
@@ -497,7 +536,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 ai_hint = None
                 _ai_safety_mult = 1.0  # AI 安全系数：只能 ≤1.0（降风险）
                 if indicators and new_regime in ("trending_up", "trending_down"):
-                    ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                    ai_hint = _timeit(_phase, "ai_hint", get_ai_regime_hint, indicators, new_regime, symbol=symbol)
                     if ai_hint:
                         confidence = ai_hint.get("confidence", 0)
                         regime = ai_hint.get("regime", "")
@@ -518,7 +557,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 elif indicators and new_regime in ("ranging",):
                     # ranging 时 AI 可以降低仓位（但不改变 regime）
                     try:
-                        ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                        ai_hint = _timeit(_phase, "ai_hint", get_ai_regime_hint, indicators, new_regime, symbol=symbol)
                         if ai_hint and ai_hint.get("confidence", 0) < 0.50:
                             _ai_safety_mult = 0.65
                             logger.info(f"🛡️ AI 对 {new_regime} 低置信度，仓位×0.65")
@@ -614,10 +653,14 @@ def run_coin(ccy: str, stop_event: threading.Event):
                     # 否则健康活跃的网格也会每 6h 被强制 stop+rebuild。
                     STAGNATION_HOURS = 6  # 超过6h无成交视为停滞
                     last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
-                    if trx_strat and trx_strat.running and (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                    _stale = trx_strat and trx_strat.running and (now - last_rebuild) > STAGNATION_HOURS * 3600
+                    if _stale and _price_in_grid_band(trx_strat, price) is True:
+                        # 价格仍在网格带内，停滞只是行情清淡 → 重组(同参)无益且白付手续费，跳过
+                        logger.debug(f"{ccy} 网格停滞 {(now-last_rebuild)/3600:.1f}h 但价格仍在带内，暂不重组")
+                    elif _stale:
                         try:
                             stale_h = (now - last_rebuild) / 3600
-                            logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                            logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h 且价格漂出带，强制重组")
                             pnl = trx_strat.stop()
                             if pnl != 0:
                                 tracker.record(pnl, "trx_adaptive")
@@ -761,9 +804,12 @@ def run_coin(ccy: str, stop_event: threading.Event):
                             name, strat = current_strategy
                             if name == "grid" and strat.running:
                                 last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
-                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                _stale = (now - last_rebuild) > STAGNATION_HOURS * 3600
+                                if _stale and _price_in_grid_band(strat, price) is True:
+                                    logger.debug(f"{ccy} 网格停滞 {(now-last_rebuild)/3600:.1f}h 但价格仍在带内，暂不重组")
+                                elif _stale:
                                     stale_h = (now - last_rebuild) / 3600
-                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                    logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h 且价格漂出带，强制重组")
                                     _pnl = strat.stop()
                                     if _pnl:
                                         tracker.record(_pnl, name)
@@ -860,18 +906,19 @@ def run_coin(ccy: str, stop_event: threading.Event):
 
         # ── 执行策略 ──────────────────────────────────────────
         try:
-            ticker = client.get_ticker()
+            ticker = _timeit(_phase, "ticker", client.get_ticker)
             price  = float(ticker["last"])
 
             if is_trx and trx_strat.running:
-                pnl = trx_strat.on_tick(price, indicators=indicators)
+                pnl = _timeit(_phase, "on_tick", trx_strat.on_tick, price, indicators=indicators)
                 if pnl != 0:
                     tracker.record(pnl, "trx_adaptive")
                     _LAST_GRID_REBUILD[ccy] = now  # 有成交→刷新停滞计时基准，活跃网格不被误判
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
             elif not is_trx and current_strategy:
                 name, strat = current_strategy
-                pnl = strat.on_tick() if name == "grid" else strat.on_tick(price, indicators=indicators)
+                pnl = (_timeit(_phase, "on_tick", strat.on_tick) if name == "grid"
+                       else _timeit(_phase, "on_tick", strat.on_tick, price, indicators=indicators))
                 if pnl != 0:
                     tracker.record(pnl, name)
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
@@ -936,7 +983,7 @@ def run_coin(ccy: str, stop_event: threading.Event):
         # ── tick 耗时监控 ────────────────────────────────
         _tick_dur = time.time() - _tick_start
         if _tick_dur > 5.0:
-            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值5s) — 策略路径或API过慢")
+            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值5s) — {_phase_breakdown(_phase)}")
 
         stop_event.wait(CHECK_INTERVAL)
 
@@ -999,6 +1046,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
     while not stop_event.is_set():
         now = time.time()
         _tick_start = now     # tick 耗时监控起点
+        _phase = {}           # tick 内各阶段耗时归因（慢 tick 时打印）
         _ai_safety_mult = 1.0  # AI 安全系数：每 tick 重置，只能 ≤1.0
 
         # ── 全局熔断检查 ──────────────────────────────────
@@ -1046,13 +1094,13 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
         if now - last_regime_check > REGIME_INTERVAL:
             try:
-                raw        = client.get_candles()
+                raw        = _timeit(_phase, "candles", client.get_candles)
                 df         = parse_candles(raw)
                 new_regime, indicators = detect_regime(df, symbol=ccy)
                 new_regime = _apply_ml_regime(new_regime, df, ccy, logger)
-                ticker     = client.get_ticker()
+                ticker     = _timeit(_phase, "ticker", client.get_ticker)
                 price      = float(ticker["last"])
-                balance    = client.get_balance("USDT")
+                balance    = _timeit(_phase, "balance", client.get_balance, "USDT")
 
                 logger.info(
                     f"行情: {new_regime} | 价格: {price} | "
@@ -1060,7 +1108,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                 )
 
                 if indicators and new_regime in ("trending_up", "trending_down"):
-                    ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                    ai_hint = _timeit(_phase, "ai_hint", get_ai_regime_hint, indicators, new_regime, symbol=symbol)
                     if ai_hint:
                         confidence = ai_hint.get("confidence", 0)
                         regime = ai_hint.get("regime", "")
@@ -1078,7 +1126,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                             new_regime = regime
                 elif indicators and new_regime in ("ranging",):
                     try:
-                        ai_hint = get_ai_regime_hint(indicators, new_regime, symbol=symbol)
+                        ai_hint = _timeit(_phase, "ai_hint", get_ai_regime_hint, indicators, new_regime, symbol=symbol)
                         if ai_hint and ai_hint.get("confidence", 0) < 0.50:
                             _ai_safety_mult = 0.65
                             logger.info(f"🛡️ AI 对 {new_regime} 低置信度，仓位×0.65")
@@ -1179,9 +1227,12 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                     if trx_swap_strat and trx_swap_strat.running:
                         try:
                             last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
-                            if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                            _stale = (now - last_rebuild) > STAGNATION_HOURS * 3600
+                            if _stale and _price_in_grid_band(trx_swap_strat, price) is True:
+                                logger.debug(f"{ccy} 网格停滞 {(now-last_rebuild)/3600:.1f}h 但价格仍在带内，暂不重组")
+                            elif _stale:
                                 stale_h = (now - last_rebuild) / 3600
-                                logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h，强制重组")
+                                logger.warning(f"🔧 {ccy} 网格停滞 {stale_h:.1f}h 且价格漂出带，强制重组")
                                 pnl = trx_swap_strat.stop()
                                 if pnl != 0:
                                     tracker.record(pnl, "trx_adaptive_futures")
@@ -1294,9 +1345,12 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
                             name, strat = current_strategy
                             if name == "futures_grid" and strat.running:
                                 last_rebuild = _LAST_GRID_REBUILD.get(ccy, 0)
-                                if (now - last_rebuild) > STAGNATION_HOURS * 3600:
+                                _stale = (now - last_rebuild) > STAGNATION_HOURS * 3600
+                                if _stale and _price_in_grid_band(strat, price) is True:
+                                    logger.debug(f"{ccy} 合约网格停滞 {(now-last_rebuild)/3600:.1f}h 但价格仍在带内，暂不重组")
+                                elif _stale:
                                     stale_h = (now - last_rebuild) / 3600
-                                    logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h，强制重组")
+                                    logger.warning(f"🔧 {ccy} 合约网格停滞 {stale_h:.1f}h 且价格漂出带，强制重组")
                                     _pnl = strat.stop()
                                     if _pnl:
                                         tracker.record(_pnl, name)
@@ -1401,18 +1455,19 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
             last_regime_check = time.time()
 
         try:
-            ticker = client.get_ticker()
+            ticker = _timeit(_phase, "ticker", client.get_ticker)
             price  = float(ticker["last"])
 
             if is_trx_swap and trx_swap_strat.running:
-                pnl = trx_swap_strat.on_tick(price, indicators=indicators)
+                pnl = _timeit(_phase, "on_tick", trx_swap_strat.on_tick, price, indicators=indicators)
                 if pnl != 0:
                     tracker.record(pnl, "trx_adaptive_futures")
                     _LAST_GRID_REBUILD[ccy] = now  # 有成交→刷新停滞计时基准
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
             elif not is_trx_swap and current_strategy:
                 name, strat = current_strategy
-                pnl = strat.on_tick(price) if name == "futures_grid" else strat.on_tick(price, indicators=indicators)
+                pnl = (_timeit(_phase, "on_tick", strat.on_tick, price) if name == "futures_grid"
+                       else _timeit(_phase, "on_tick", strat.on_tick, price, indicators=indicators))
                 if pnl != 0:
                     tracker.record(pnl, name)
                     logger.info(f"盈亏: {pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
@@ -1461,7 +1516,7 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         # ── tick 耗时监控 ────────────────────────────────
         _tick_dur = time.time() - _tick_start
         if _tick_dur > 8.0:
-            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值8s) — API或策略路径过慢")
+            logger.warning(f"⏱️ {ccy} tick 耗时 {_tick_dur:.1f}s (阈值8s) — {_phase_breakdown(_phase)}")
 
         stop_event.wait(CHECK_INTERVAL)
 
