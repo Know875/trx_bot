@@ -462,7 +462,9 @@ def run_coin(ccy: str, stop_event: threading.Event):
         for sname in StrategyGuard._get_coin_strategies(ccy):
             sr = _sguard.check(ccy, sname)
             if sr["mode"] != "normal" and not sr["allowed"]:
-                logger.info(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
+                # 永久禁用降为 debug，避免每 60s 刷 INFO 噪音
+                log_fn = logger.debug if sr["mode"] == "disabled" else logger.info
+                log_fn(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
             else:
                 break
         else:
@@ -632,8 +634,17 @@ def run_coin(ccy: str, stop_event: threading.Event):
                     # 行情切换策略（ETH / SOL）— 带冷却，避免频繁切换市价平仓
                     if new_regime != current_regime:
                         if now - last_switch_time < SWITCH_COOLDOWN:
-                            # 冷却期内：不切换，继续用原策略
-                            pass
+                            # 冷却期内：趋势向下时立即停止网格（继续做多只会加重损失）
+                            if new_regime == "trending_down" and current_strategy and current_strategy[0] == "grid":
+                                logger.info(f"{ccy} 趋势转空，冷却期内跳过冷却，立即停止现货网格")
+                                _name, _strat = current_strategy
+                                _pnl = _strat.stop()
+                                if _pnl:
+                                    tracker.record(_pnl, _name)
+                                    logger.info(f"盈亏: {_pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
+                                current_strategy = None
+                                current_regime = new_regime
+                                last_switch_time = now
                         else:
                             logger.info(f"行情切换: {current_regime} → {new_regime}")
                             if current_strategy:
@@ -902,6 +913,23 @@ def run_coin(ccy: str, stop_event: threading.Event):
                 last_regime_check = 0  # 强制下一轮重新识别行情
                 continue  # 跳回 while 循环顶部
 
+            # ── 浮盈止盈（现货网格）：浮盈超过目标 → 锁利平仓 ──
+            if not is_trx and current_strategy and floating > 0:
+                _fname, _fstrat = current_strategy
+                _fp_target = getattr(config, "GRID_FLOAT_PROFIT_TARGET", 150.0)
+                if _fname == "grid" and _fstrat.running and floating >= _fp_target:
+                    logger.warning(f"💰 {ccy} 网格浮盈 {floating:+.2f}U ≥ {_fp_target}U，触发止盈平仓")
+                    _pnl = _fstrat.stop()
+                    if _pnl:
+                        tracker.record(_pnl, _fname)
+                        logger.info(f"盈亏: {_pnl:+.4f} | 累计: {tracker.realized_pnl:+.4f} USDT")
+                    send_tg(f"💰 {ccy} 网格浮盈止盈 {floating:+.2f}U，已平仓")
+                    current_strategy = None
+                    current_regime = None
+                    last_switch_time = now
+                    last_regime_check = 0
+                    continue
+
         except Exception as e:
             logger.error(f"策略执行异常: {e}")
 
@@ -1002,7 +1030,8 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
         for sname in StrategyGuard._get_coin_strategies(ccy):
             sr = _sguard.check(ccy, sname)
             if sr["mode"] != "normal" and not sr["allowed"]:
-                logger.info(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
+                log_fn = logger.debug if sr["mode"] == "disabled" else logger.info
+                log_fn(f"  🚫 策略熔断 {ccy}.{sname}: {sr['reason']}")
             else:
                 break
         else:

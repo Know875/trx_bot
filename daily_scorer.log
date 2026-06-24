@@ -1,0 +1,264 @@
+2026-06-10 01:00:02,599 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+2197.37
+2026-06-10 01:00:03,033 [daily_score]   ETH:grid score=78/100 PnL=+747.84
+2026-06-10 01:00:03,054 [daily_score]   TRX:trx_adaptive score=86/100 PnL=+472.90
+2026-06-10 01:00:03,060 [daily_score]   SOL:trend score=77/100 PnL=+35.44
+2026-06-10 01:00:03,064 [daily_score]   TRX:grid score=16/100 PnL=-5.14
+2026-06-10 01:00:03,066 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-53.49
+2026-06-10 01:00:03,067 [daily_score]   SOL_SWAP:futures_grid score=15/100 PnL=-83.88
+2026-06-10 01:00:03,078 [daily_score]   ETH:trend score=18/100 PnL=-127.48
+2026-06-10 01:00:03,093 [daily_score]   SOL:grid score=27/100 PnL=-158.37
+2026-06-10 01:00:03,093 [daily_score] 已完成 9 个策略评分 (2026-06-09)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🟢 TRX:trx_adaptive             
+  🟢 ETH:grid                     
+  🔴 ETH:trend                    (×0%)  评分18<25，暂停72h
+  🔴 SOL:grid                     (×0%)  策略暂停中，剩余 10.1h
+  🟢 SOL:trend                    
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  🔴 ETH_SWAP:futures_grid        (×0%)  策略暂停中，剩余 58.1h
+  🟢 ETH_SWAP:futures_trend       
+  🔴 SOL_SWAP:futures_grid        (×0%)  策略暂停中，剩余 58.1h
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 4 暂停
+
+📋 日报建议 (4 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+2197.37 (胜率 98.5%) → 继续保持
+  [最大亏损] SOL.grid: $-158.37 (胜率 62.3%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_grid: 回撤 2054.3% → 建议降低杠杆或仓位
+  [综合最差] SOL_SWAP.futures_grid: 评分 15/100 → 建议暂停并回测验证
+2026-06-11 01:00:02,397 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+1016.52
+2026-06-11 01:00:02,523 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+992.78
+2026-06-11 01:00:02,614 [daily_score]   SOL_SWAP:futures_trend score=65/100 PnL=+682.22
+2026-06-11 01:00:02,624 [daily_score]   ETH:grid score=78/100 PnL=+296.53
+2026-06-11 01:00:02,627 [daily_score]   SOL_SWAP:futures_grid score=75/100 PnL=+289.56
+2026-06-11 01:00:02,628 [daily_score]   TRX:trx_adaptive score=86/100 PnL=+183.48
+2026-06-11 01:00:02,631 [daily_score]   SOL:trend score=77/100 PnL=+35.44
+2026-06-11 01:00:02,632 [daily_score]   TRX:grid score=30/100 PnL=-2.06
+2026-06-11 01:00:02,634 [daily_score]   ETH:trend score=18/100 PnL=-50.99
+2026-06-11 01:00:02,636 [daily_score]   SOL:grid score=27/100 PnL=-158.37
+2026-06-11 01:00:02,638 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-807.65
+2026-06-11 01:00:02,639 [daily_score] 已完成 11 个策略评分 (2026-06-10)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🟢 TRX:trx_adaptive             
+  🟢 ETH:grid                     
+  🔴 ETH:trend                    (×0%)  策略暂停中，剩余 48.0h
+  💀 SOL:grid                     (×0%)  试运行失败: 评分27<40，已永久禁用
+  🟢 SOL:trend                    
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  🔴 ETH_SWAP:futures_grid        (×0%)  策略暂停中，剩余 34.1h
+  🟢 ETH_SWAP:futures_trend       
+  🔴 SOL_SWAP:futures_grid        (×0%)  策略暂停中，剩余 34.1h
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 3 暂停, 1 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] ETH_SWAP.futures_trend: $+1016.52 (胜率 48.9%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-807.65 (胜率 50.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_trend: 回撤 344.3% → 建议降低杠杆或仓位
+  [综合最差] ETH_SWAP.futures_grid: 评分 17/100 → 建议暂停并回测验证
+2026-06-12 01:00:02,285 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+582.93
+2026-06-12 01:00:02,303 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+279.39
+2026-06-12 01:00:02,310 [daily_score]   ETH:grid score=78/100 PnL=+230.03
+2026-06-12 01:00:02,361 [daily_score]   SOL_SWAP:futures_trend score=55/100 PnL=+152.33
+2026-06-12 01:00:02,964 [daily_score]   SOL_SWAP:futures_grid score=75/100 PnL=+96.52
+2026-06-12 01:00:03,062 [daily_score]   TRX:trx_adaptive score=81/100 PnL=+86.53
+2026-06-12 01:00:03,090 [daily_score]   SOL:trend score=67/100 PnL=+6.00
+2026-06-12 01:00:03,174 [daily_score]   TRX:grid score=35/100 PnL=-1.03
+2026-06-12 01:00:03,184 [daily_score]   ETH:trend score=18/100 PnL=-25.50
+2026-06-12 01:00:03,189 [daily_score]   SOL:grid score=27/100 PnL=-52.79
+2026-06-12 01:00:03,190 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-269.22
+2026-06-12 01:00:03,190 [daily_score] 已完成 11 个策略评分 (2026-06-11)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🟢 TRX:trx_adaptive             
+  🟢 ETH:grid                     
+  🔴 ETH:trend                    (×0%)  策略暂停中，剩余 24.0h
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  🟢 SOL:trend                    
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  🔴 ETH_SWAP:futures_grid        (×0%)  策略暂停中，剩余 10.1h
+  🟢 ETH_SWAP:futures_trend       
+  🔴 SOL_SWAP:futures_grid        (×0%)  策略暂停中，剩余 10.1h
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 3 暂停, 1 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+582.93 (胜率 91.5%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-269.22 (胜率 50.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_trend: 回撤 344.3% → 建议降低杠杆或仓位
+  [综合最差] ETH_SWAP.futures_grid: 评分 17/100 → 建议暂停并回测验证
+2026-06-13 01:00:03,162 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+649.73
+2026-06-13 01:00:03,179 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+279.39
+2026-06-13 01:00:03,183 [daily_score]   ETH:grid score=78/100 PnL=+234.59
+2026-06-13 01:00:03,187 [daily_score]   SOL_SWAP:futures_grid score=75/100 PnL=+97.45
+2026-06-13 01:00:03,192 [daily_score]   TRX:trx_adaptive score=76/100 PnL=+94.10
+2026-06-13 01:00:03,196 [daily_score]   SOL_SWAP:futures_trend score=55/100 PnL=+85.64
+2026-06-13 01:00:03,203 [daily_score]   TRX:grid score=35/100 PnL=-1.03
+2026-06-13 01:00:03,209 [daily_score]   SOL:trend score=17/100 PnL=-19.67
+2026-06-13 01:00:03,213 [daily_score]   ETH:trend score=18/100 PnL=-25.50
+2026-06-13 01:00:03,226 [daily_score]   SOL:grid score=27/100 PnL=-52.79
+2026-06-13 01:00:03,231 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-269.22
+2026-06-13 01:00:03,231 [daily_score] 已完成 11 个策略评分 (2026-06-12)
+2026-06-13 01:00:03,234 [daily_score] 🔄 ETH:trend 暂停到期，进入 12h 试运行 (30%仓位)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🟢 TRX:trx_adaptive             
+  🟢 ETH:grid                     
+  🟡 ETH:trend                    (×30%)  恢复试运行 (30%仓位)，12h 后评估
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  🔴 SOL:trend                    (×0%)  评分17<25，暂停72h
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  💀 ETH_SWAP:futures_grid        (×0%)  策略已禁用: 试运行结束评分17<40，永久禁用
+  🟢 ETH_SWAP:futures_trend       
+  🟢 SOL_SWAP:futures_grid        
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 1 试运行, 1 暂停, 2 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+649.73 (胜率 90.5%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-269.22 (胜率 50.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_trend: 回撤 344.3% → 建议降低杠杆或仓位
+  [综合最差] SOL.trend: 评分 17/100 → 建议暂停并回测验证
+2026-06-14 01:00:03,278 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+14.78
+2026-06-14 01:00:03,455 [daily_score]   ETH:grid score=78/100 PnL=+11.67
+2026-06-14 01:00:03,578 [daily_score]   TRX:trx_adaptive score=31/100 PnL=+0.14
+2026-06-14 01:00:03,579 [daily_score] 已完成 3 个策略评分 (2026-06-13)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🔴 TRX:trx_adaptive             (×0%)  评分31<40，暂停24h
+  🟢 ETH:grid                     
+  💀 ETH:trend                    (×0%)  试运行失败: 评分18<40，已永久禁用
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  🔴 SOL:trend                    (×0%)  策略暂停中，剩余 48.0h
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  💀 ETH_SWAP:futures_grid        (×0%)  策略已禁用: 试运行结束评分17<40，永久禁用
+  🟢 ETH_SWAP:futures_trend       
+  🟢 SOL_SWAP:futures_grid        
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 2 暂停, 3 禁用
+
+📋 日报建议 (3 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+14.78 (胜率 66.7%) → 继续保持
+  [最大回撤] TRX.trx_adaptive: 回撤 84.7% → 建议降低杠杆或仓位
+  [综合最差] TRX.trx_adaptive: 评分 31.725/100 → 建议暂停并回测验证
+2026-06-15 01:00:03,150 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+2052.47
+2026-06-15 01:00:03,508 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+838.16
+2026-06-15 01:00:03,560 [daily_score]   ETH:grid score=78/100 PnL=+755.85
+2026-06-15 01:00:03,562 [daily_score]   SOL_SWAP:futures_grid score=75/100 PnL=+280.90
+2026-06-15 01:00:03,564 [daily_score]   SOL_SWAP:futures_trend score=55/100 PnL=+146.65
+2026-06-15 01:00:03,565 [daily_score]   ETH:trend score=18/100 PnL=-76.49
+2026-06-15 01:00:03,567 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-807.65
+2026-06-15 01:00:03,567 [daily_score] 已完成 7 个策略评分 (2026-06-14)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🔴 TRX:trx_adaptive             (×0%)  策略暂停中，剩余 0.0h
+  🟢 ETH:grid                     
+  💀 ETH:trend                    (×0%)  策略已禁用: 试运行结束评分18<40，永久禁用
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  🔴 SOL:trend                    (×0%)  策略暂停中，剩余 24.0h
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  💀 ETH_SWAP:futures_grid        (×0%)  策略已禁用: 试运行结束评分17<40，永久禁用
+  🟢 ETH_SWAP:futures_trend       
+  🟢 SOL_SWAP:futures_grid        
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 2 暂停, 3 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+2052.47 (胜率 88.9%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-807.65 (胜率 50.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_trend: 回撤 3826.4% → 建议降低杠杆或仓位
+  [综合最差] ETH_SWAP.futures_grid: 评分 17/100 → 建议暂停并回测验证
+2026-06-16 01:00:04,903 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+5121.99
+2026-06-16 01:00:05,491 [daily_score]   ETH:grid score=78/100 PnL=+4407.99
+2026-06-16 01:00:05,760 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+1864.51
+2026-06-16 01:00:05,906 [daily_score]   SOL_SWAP:futures_trend score=55/100 PnL=+1304.06
+2026-06-16 01:00:06,478 [daily_score]   SOL_SWAP:futures_grid score=75/100 PnL=+602.01
+2026-06-16 01:00:06,861 [daily_score]   TRX:trx_adaptive score=81/100 PnL=+97.24
+2026-06-16 01:00:07,125 [daily_score]   TRX:grid score=35/100 PnL=-1.03
+2026-06-16 01:00:07,256 [daily_score]   ETH:trend score=18/100 PnL=-178.47
+2026-06-16 01:00:07,257 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-1884.52
+2026-06-16 01:00:07,257 [daily_score] 已完成 9 个策略评分 (2026-06-15)
+2026-06-16 01:00:07,258 [daily_score] 🔄 SOL:trend 暂停到期，进入 12h 试运行 (30%仓位)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  💀 TRX:trx_adaptive             (×0%)  策略已禁用: 试运行结束评分31<40，永久禁用
+  🟢 ETH:grid                     
+  💀 ETH:trend                    (×0%)  策略已禁用: 试运行结束评分18<40，永久禁用
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  🟡 SOL:trend                    (×30%)  恢复试运行 (30%仓位)，12h 后评估
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  💀 ETH_SWAP:futures_grid        (×0%)  策略已禁用: 试运行结束评分17<40，永久禁用
+  🟢 ETH_SWAP:futures_trend       
+  🟢 SOL_SWAP:futures_grid        
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 1 试运行, 4 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] TRX_SWAP.trx_adaptive_futures: $+5121.99 (胜率 97.3%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-1884.52 (胜率 50.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_trend: 回撤 3887.8% → 建议降低杠杆或仓位
+  [综合最差] ETH_SWAP.futures_grid: 评分 17/100 → 建议暂停并回测验证
+2026-06-17 01:00:01,916 [daily_score]   ETH:grid score=78/100 PnL=+1534.87
+2026-06-17 01:00:01,932 [daily_score]   TRX_SWAP:trx_adaptive_futures score=86/100 PnL=+763.26
+2026-06-17 01:00:01,938 [daily_score]   ETH_SWAP:futures_trend score=67/100 PnL=+681.36
+2026-06-17 01:00:01,940 [daily_score]   SOL_SWAP:futures_trend score=55/100 PnL=+214.10
+2026-06-17 01:00:01,948 [daily_score]   TRX:trx_adaptive score=76/100 PnL=+82.91
+2026-06-17 01:00:01,970 [daily_score]   TRX:grid score=35/100 PnL=-1.03
+2026-06-17 01:00:01,973 [daily_score]   SOL:trend score=17/100 PnL=-6.84
+2026-06-17 01:00:01,975 [daily_score]   ETH:trend score=18/100 PnL=-25.50
+2026-06-17 01:00:01,980 [daily_score]   SOL:grid score=27/100 PnL=-54.24
+2026-06-17 01:00:01,990 [daily_score]   SOL_SWAP:futures_grid score=15/100 PnL=-375.30
+2026-06-17 01:00:02,101 [daily_score]   ETH_SWAP:futures_grid score=17/100 PnL=-523.79
+2026-06-17 01:00:02,103 [daily_score] 已完成 11 个策略评分 (2026-06-16)
+
+
+🛡️ 策略熔断 (0/10 正常)
+══════════════════════════════════════════════════
+  🟢 TRX:trx_adaptive             
+  🟢 ETH:grid                     
+  💀 ETH:trend                    (×0%)  策略已禁用: 试运行结束评分18<40，永久禁用
+  💀 SOL:grid                     (×0%)  策略已禁用: 试运行结束评分27<40，永久禁用
+  ⚠️ SOL:trend                    (×50%)  连续2天评分<40，仓位减半
+  🟢 TRX_SWAP:trx_adaptive_futures 
+  💀 ETH_SWAP:futures_grid        (×0%)  策略已禁用: 试运行结束评分17<40，永久禁用
+  🟢 ETH_SWAP:futures_trend       
+  🔴 SOL_SWAP:futures_grid        (×0%)  评分15<25，暂停72h
+  🟢 SOL_SWAP:futures_trend       
+
+⚠️ 需关注: 1 暂停, 1 减半, 3 禁用
+
+📋 日报建议 (4 条):
+  [最高收益] ETH.grid: $+1534.87 (胜率 79.4%) → 继续保持
+  [最大亏损] ETH_SWAP.futures_grid: $-523.79 (胜率 49.0%) → 建议降级或暂停
+  [最大回撤] SOL_SWAP.futures_grid: 回撤 683.8% → 建议降低杠杆或仓位
+  [综合最差] SOL_SWAP.futures_grid: 评分 15/100 → 建议暂停并回测验证
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory
+/usr/bin/python3: can't open file '/root/projects/trx_bot/daily_scorer.py': [Errno 2] No such file or directory

@@ -43,9 +43,13 @@ class FuturesTrendStrategy:
                 raise RuntimeError(f"无效合约面值: {self._ct_val}，拒绝开仓")
         return self._ct_val
 
+    def _position_pct(self):
+        base = self.ccy.split("-")[0] if "-" in self.ccy else self.ccy
+        return getattr(config, f"{base}_TREND_POSITION_PCT", config.TREND_POSITION_PCT)
+
     def _calc_contracts(self, price):
-        ct_val   = self._get_ct_val()
-        usdt     = self.capital * config.TREND_POSITION_PCT * config.get_leverage(self.ccy)
+        ct_val    = self._get_ct_val()
+        usdt      = self.capital * self._position_pct() * config.get_leverage(self.ccy)
         contracts = usdt / (price * ct_val)
         return max(1, math.floor(contracts))
 
@@ -72,12 +76,14 @@ class FuturesTrendStrategy:
 
         if regime == "trending_up":
             if rsi >= self._rsi_ob():
-                logger.info(f"RSI={rsi:.1f} 超买，暂不追多入场，等待回调")
+                logger.info(f"RSI={rsi:.1f} 超买，跳过本次追多入场")
+                self._can_reenter = False  # 本 regime 周期内不再等待 RSI 回落后入场
                 return
             self._open_position("long", current_price, atr)
         elif regime == "trending_down":
             if rsi <= self._rsi_os():
-                logger.info(f"RSI={rsi:.1f} 超卖，暂不追空入场，等待反弹")
+                logger.info(f"RSI={rsi:.1f} 超卖，跳过本次追空入场")
+                self._can_reenter = False  # 本 regime 周期内不再等待 RSI 反弹后入场
                 return
             self._open_position("short", current_price, atr)
 

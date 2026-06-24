@@ -1,0 +1,868 @@
+INFO:     127.0.0.1:47862 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52548 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42918 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49100 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48568 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35912 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55362 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40170 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56686 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54906 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33038 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58932 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39070 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40030 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53912 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40576 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52414 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36446 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48928 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39492 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32964 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38268 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59092 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37066 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47810 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35520 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54844 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41978 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60680 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42300 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42576 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     61.79.99.166:59011 - "GET / HTTP/1.0" 200 OK
+INFO:     127.0.0.1:37490 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     198.235.24.122:49618 - "GET / HTTP/1.0" 200 OK
+INFO:     127.0.0.1:43974 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33126 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54328 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53340 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42374 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38440 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51216 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37410 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38724 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34136 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44048 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38596 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57422 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41910 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37720 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42944 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43408 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55590 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56628 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60726 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40276 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33244 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34816 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33426 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58928 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38404 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58150 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43320 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45666 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42216 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44110 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59674 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51490 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51902 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48654 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45136 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33854 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40158 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58956 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41524 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35486 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55834 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42342 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39932 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35370 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33510 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52324 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58416 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37326 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49554 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43186 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52754 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52608 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49426 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58990 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57922 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45798 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54224 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34966 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58908 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56478 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55812 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40560 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32952 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38138 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46808 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34142 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60540 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57754 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55564 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:42368 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55136 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:38626 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40182 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60768 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54106 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35698 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46162 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32862 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45204 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50820 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48652 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33950 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54492 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33894 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57654 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57504 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58862 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34130 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57080 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33212 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49508 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33242 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51878 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53064 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38362 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37132 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59330 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41554 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34922 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33474 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57812 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55846 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44758 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45404 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54214 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     198.235.24.179:63806 - "GET /metrics HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60494 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60546 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59088 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53016 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42354 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56020 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47482 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35672 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40486 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59360 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35358 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42808 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54016 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45054 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43612 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40340 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33182 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55504 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55166 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52788 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39764 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33746 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40886 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41074 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37118 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48488 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36178 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49722 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57738 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51928 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46454 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59062 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37804 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47344 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39262 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58376 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51614 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46224 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57046 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54462 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57410 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42718 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:36352 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41202 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33372 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40732 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48470 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51742 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51972 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36380 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39644 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46054 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38954 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36124 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46810 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44910 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57544 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33800 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53088 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41994 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37748 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54304 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60708 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46860 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52942 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35720 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36692 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     45.198.224.5:46802 - "GET /login HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41844 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43844 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45550 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59316 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48906 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47042 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52400 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39302 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46946 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57444 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44696 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37304 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60128 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44214 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43298 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49452 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54334 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46942 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41300 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34904 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50196 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49698 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44290 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50178 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60460 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45032 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39172 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59468 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50676 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49024 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45610 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38928 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57396 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55820 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35018 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52034 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47566 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33724 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52172 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34202 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57214 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36038 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37542 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45582 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50766 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50426 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48868 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43278 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41574 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45504 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53074 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     89.187.163.229:36648 - "GET / HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/logs?lines=80&ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:58543 - "WebSocket /ws" [accepted]
+INFO:     connection open
+INFO:     89.187.163.229:51245 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:49469 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     89.187.163.229:60363 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/candles?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/stats?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/trades?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/stats?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/trades?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/trades?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/stats?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/stats?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/trades?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/stats?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/trades?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/system/status HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/measure HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/carry HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/logs?lines=80&ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/candles?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/stats?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/trades?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/stats?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/trades?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/stats?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/stats?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/trades?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/stats?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/trades?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/trades?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36648 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/system/status HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:59132 - "GET /api/measure HTTP/1.1" 200 OK
+INFO:     89.187.163.229:55637 - "GET /api/carry HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60363 - "GET /api/futures/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51245 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35423 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:42418 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:36265 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:51957 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:56209 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46084 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     89.187.163.229:40270 - "GET /api/logs?lines=80&ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40185 - "GET /api/trades?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:48120 - "GET /api/stats?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:34687 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41765 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40270 - "GET /api/stats?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:58973 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41765 - "GET /api/stats?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:48120 - "GET /api/trades?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40185 - "GET /api/stats?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:34687 - "GET /api/trades?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40270 - "GET /api/trades?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:58973 - "GET /api/stats?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41765 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40185 - "GET /api/trades?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:48120 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:34687 - "GET /api/system/status HTTP/1.1" 200 OK
+INFO:     89.187.163.229:58973 - "GET /api/measure HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40270 - "GET /api/carry HTTP/1.1" 200 OK
+INFO:     89.187.163.229:58973 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40270 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41765 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:48120 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35305 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35721 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:57802 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:47537 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40581 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:35951 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40505 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:33609 - "GET /api/trades?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60956 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41725 - "GET /api/candles?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:38479 - "GET /api/stats?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:43783 - "GET /api/logs?lines=80&ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40505 - "GET /api/trades?ccy=ETH HTTP/1.1" 200 OK
+INFO:     89.187.163.229:33609 - "GET /api/stats?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60956 - "GET /api/trades?ccy=SOL HTTP/1.1" 200 OK
+INFO:     89.187.163.229:43783 - "GET /api/stats?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60956 - "GET /api/trades?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40505 - "GET /api/stats?ccy=SOL_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:38479 - "GET /api/trades?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41725 - "GET /api/trades?ccy=TRX_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:33609 - "GET /api/stats?ccy=ETH_SWAP HTTP/1.1" 200 OK
+INFO:     89.187.163.229:43783 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40505 - "GET /api/overview HTTP/1.1" 200 OK
+INFO:     89.187.163.229:33609 - "GET /api/system/status HTTP/1.1" 200 OK
+INFO:     89.187.163.229:60956 - "GET /api/measure HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41725 - "GET /api/carry HTTP/1.1" 200 OK
+INFO:     89.187.163.229:38479 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:43783 - "GET /api/stats?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:40505 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:41725 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:37849 - "GET /api/status?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:53725 - "GET /api/position?ccy=TRX HTTP/1.1" 200 OK
+INFO:     89.187.163.229:44355 - "GET /api/orders?ccy=TRX HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51378 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     connection closed
+INFO:     127.0.0.1:59228 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39958 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42574 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42190 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55350 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44474 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40992 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58894 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40594 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40766 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58564 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41400 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39446 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52490 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45470 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47168 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52846 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38472 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42426 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50072 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34028 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37358 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41940 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32942 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39884 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34980 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60502 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33896 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56060 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33168 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42348 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37986 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52664 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41368 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56526 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43528 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38368 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40060 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54122 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52622 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38842 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60594 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35634 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45660 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51146 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58656 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40796 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48604 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53294 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43716 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50194 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35982 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38556 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35824 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52936 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35784 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49362 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34848 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60118 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51862 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36958 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33164 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37326 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51554 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58128 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57020 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42534 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35086 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39576 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45558 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54728 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36414 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     195.96.139.233:45727 - "GET / HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:45550 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40204 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45050 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44112 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47142 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49080 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46882 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     91.196.152.202:49531 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60020 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57102 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     91.231.89.40:58107 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35310 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38938 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35122 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49072 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     160.119.71.136:44532 - "POST / HTTP/1.1" 405 Method Not Allowed
+INFO:     160.119.71.136:44536 - "POST /_next HTTP/1.1" 401 Unauthorized
+INFO:     160.119.71.136:59574 - "POST /api HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:58430 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     160.119.71.136:59582 - "POST /_next/server HTTP/1.1" 401 Unauthorized
+INFO:     160.119.71.136:59584 - "POST /app HTTP/1.1" 401 Unauthorized
+INFO:     160.119.71.136:59594 - "POST /api/route HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:51670 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44754 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56846 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55834 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57108 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47866 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33098 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54560 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60034 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41668 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59576 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56454 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39386 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59444 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50046 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54270 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53852 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47386 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34988 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38116 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59662 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43344 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50616 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47718 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60886 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56778 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51236 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43032 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45260 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54692 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38438 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:58584 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39444 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36292 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43734 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42082 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39218 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47640 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52270 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40964 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52734 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37262 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40224 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34288 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43760 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46890 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53258 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60964 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60770 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48118 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55162 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35200 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44170 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60850 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44330 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59828 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35698 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37494 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48710 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38864 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41914 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36834 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36036 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50664 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60336 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47624 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46900 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56438 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34608 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41432 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38450 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36194 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43840 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56534 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50618 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53358 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36082 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53674 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37610 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59516 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38662 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39360 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41126 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45250 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32796 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48888 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55002 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50538 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40804 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57480 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46706 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55008 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37624 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35320 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50934 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43618 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47990 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33134 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43690 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60902 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53744 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57734 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45730 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52078 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46010 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35422 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36302 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43042 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36196 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37128 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53006 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56538 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58554 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47862 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37060 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50172 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44662 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33150 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54254 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55424 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45658 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47006 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35462 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56246 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:58884 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56494 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36332 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50084 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43220 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49706 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33182 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48456 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60460 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58160 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56838 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56954 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49900 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55680 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58414 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44638 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46834 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36764 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36986 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49680 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36926 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46178 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36328 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51574 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34636 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33576 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41962 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38138 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47702 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49664 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57246 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51262 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38180 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40222 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35818 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55834 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37180 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47892 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58320 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46992 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57648 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54776 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     69.5.169.229:26502 - "GET / HTTP/1.1" 200 OK
+INFO:     69.5.169.85:4808 - "GET / HTTP/1.1" 200 OK
+INFO:     69.5.169.8:4458 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     69.5.169.14:10734 - "POST / HTTP/1.1" 405 Method Not Allowed
+INFO:     69.5.169.60:9426 - "POST /mcp HTTP/1.1" 401 Unauthorized
+INFO:     69.5.169.123:13880 - "GET /sse HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:60620 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     3.129.187.38:26428 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:47856 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49416 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41884 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53672 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38088 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40934 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55648 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36178 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55818 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     176.65.149.182:41196 - "CONNECT ipv4-internet.yandex.net%3A443 HTTP/1.1" 401 Unauthorized
+INFO:     127.0.0.1:39116 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51616 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53872 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51174 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51754 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45826 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47866 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51476 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35508 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51148 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43882 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42766 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     85.217.140.45:47660 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37090 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47258 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39068 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34394 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58934 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38698 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35268 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33538 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43318 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57106 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38348 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39928 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43426 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43760 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46720 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60570 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34968 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37838 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39868 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33798 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59566 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43458 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41056 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43366 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38904 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47146 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46632 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55776 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41878 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59488 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37904 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:32976 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45674 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53650 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38038 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35998 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36954 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46932 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45280 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58554 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55376 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43704 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52358 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54794 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35040 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     18.116.101.220:48512 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46606 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46124 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     18.116.101.220:51646 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56858 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54038 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:40502 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35076 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48982 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60622 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45742 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42212 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46000 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47030 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45290 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46160 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57308 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35166 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54212 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39092 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35922 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51190 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54276 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49608 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42986 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43736 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39578 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48530 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50510 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54644 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34858 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33546 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47032 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:50812 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     16.58.56.214:40832 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46250 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35226 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:49460 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47786 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41572 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34602 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52408 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51818 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45364 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46514 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44698 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:47840 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53548 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41870 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35684 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48408 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52876 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33428 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60036 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59888 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33980 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38166 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44936 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55166 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46406 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56592 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49304 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45614 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39430 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55514 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36428 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59706 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40458 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59216 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43282 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52690 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60940 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60810 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38968 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54726 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43342 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55280 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:58386 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33826 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:48514 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51802 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41866 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42716 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33980 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52434 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46856 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53150 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50542 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44184 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55982 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35220 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33162 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55976 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     3.132.26.232:40188 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42264 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     3.132.26.232:28084 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43364 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33638 - "GET /heartbeat HTTP/1.1" 404 Not Found
+WARNING:  Invalid HTTP request received.
+INFO:     127.0.0.1:60234 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:35442 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44030 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39558 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60224 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42440 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55514 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43814 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44808 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43504 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49506 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45006 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:42716 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:44530 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55024 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34870 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56766 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50706 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:34820 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:37256 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46718 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:59474 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51100 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:39526 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:38586 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:46920 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40518 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51898 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:33210 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:43200 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:40260 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:45144 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:36268 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:41866 - "GET /heartbeat HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50972 - "GET /heartbeat HTTP/1.1" 404 Not Found

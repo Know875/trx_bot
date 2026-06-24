@@ -103,47 +103,6 @@ def _load_existing_sweep() -> dict:
     return dict(existing)
 
 
-def _optuna_findings(coin, current_params, ind):
-    """用 Optuna 联合优化 width×levels，产出与离散扫参同构的 findings。
-    返回 None 表示 Optuna 不可用（调用方回退离散扫参）；返回 [] 表示无显著提升。"""
-    res = optimize_grid(coin, ind=ind)
-    if res is None:
-        return None
-    if res.get("method") != "optuna":
-        # optimize 内部已回退到离散扫参 → 让 brain 走自己的离散逻辑，保持单一来源
-        return None
-
-    best = res["best_params"]
-    best_w, best_lv = best.get("grid_width"), best.get("grid_levels")
-    if best_w is None or best_lv is None:
-        return []
-
-    cur_w = current_params.get("grid_range_pct")
-    cur_lv = current_params.get("grid_count")
-    cur_pnl = current_pnl(coin, cur_w or best_w, cur_lv or best_lv, ind=ind)
-    best_pnl = res.get("best_value", cur_pnl)
-    improvement = best_pnl - cur_pnl
-    if improvement <= 0.3:   # 与离散扫参一致的提升门槛
-        return []
-
-    findings = []
-    if cur_w is not None and abs(round(best_w, 3) - cur_w) > 1e-4:
-        findings.append({
-            "coin": coin, "param": "grid_range_pct",
-            "current": cur_w, "candidate": round(best_w, 3),
-            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
-            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
-        })
-    if cur_lv is not None and int(best_lv) != int(cur_lv):
-        findings.append({
-            "coin": coin, "param": "grid_count",
-            "current": cur_lv, "candidate": int(best_lv),
-            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
-            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
-        })
-    return findings
-
-
 def explore_parameter_space(dry_run=False):
     """
     扫描所有币种的参数空间，找出回测表现好但未测试过的组合。
@@ -951,40 +910,6 @@ def show_status():
 # CLI
 # ═══════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
-    if len(sys.argv) < 2:
-        print("用法: python brain.py [explore|regime|auto-tune|rollback|status]")
-        print("  explore    探索未测试的参数空间")
-        print("  regime     学习行情-参数关联")
-        print("  auto-tune  一键全自动（回滚+探索+学习+执行）")
-        print("  rollback   检查并执行参数回滚")
-        print("  status     查看进化状态")
-        sys.exit(1)
-
-    cmd = sys.argv[1]
-
-    if cmd == "explore":
-        explore_parameter_space()
-    elif cmd == "regime":
-        build_regime_model()
-    elif cmd == "auto-tune":
-        auto_tune(apply_safe=True)
-    elif cmd == "rollback":
-        check_rollback(apply_revert=True)
-    elif cmd == "status":
-        show_status()
-    else:
-        print(f"未知命令: {cmd}")
-        print("用法: python brain.py [explore|regime|auto-tune|rollback|status]")
-        sys.exit(1)
-
-
 # ========== merged from optimize.py ==========
 
 """
@@ -1130,6 +1055,47 @@ def current_pnl(coin: str, width: float, levels: int, ind=None, days: int = 180)
         return float(r.get("pnl_pct", 0.0)) if r else 0.0
     except Exception:
         return 0.0
+
+
+def _optuna_findings(coin, current_params, ind):
+    """用 Optuna 联合优化 width×levels，产出与离散扫参同构的 findings。
+    返回 None 表示 Optuna 不可用（调用方回退离散扫参）；返回 [] 表示无显著提升。"""
+    res = optimize_grid(coin, ind=ind)
+    if res is None:
+        return None
+    if res.get("method") != "optuna":
+        # optimize 内部已回退到离散扫参 → 让 brain 走自己的离散逻辑，保持单一来源
+        return None
+
+    best = res["best_params"]
+    best_w, best_lv = best.get("grid_width"), best.get("grid_levels")
+    if best_w is None or best_lv is None:
+        return []
+
+    cur_w = current_params.get("grid_range_pct")
+    cur_lv = current_params.get("grid_count")
+    cur_pnl = current_pnl(coin, cur_w or best_w, cur_lv or best_lv, ind=ind)
+    best_pnl = res.get("best_value", cur_pnl)
+    improvement = best_pnl - cur_pnl
+    if improvement <= 0.3:   # 与离散扫参一致的提升门槛
+        return []
+
+    findings = []
+    if cur_w is not None and abs(round(best_w, 3) - cur_w) > 1e-4:
+        findings.append({
+            "coin": coin, "param": "grid_range_pct",
+            "current": cur_w, "candidate": round(best_w, 3),
+            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
+            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
+        })
+    if cur_lv is not None and int(best_lv) != int(cur_lv):
+        findings.append({
+            "coin": coin, "param": "grid_count",
+            "current": cur_lv, "candidate": int(best_lv),
+            "current_pnl": round(cur_pnl, 2), "candidate_pnl": round(best_pnl, 2),
+            "improvement": round(improvement, 2), "win_rate": 0.0, "rank": 1,
+        })
+    return findings
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1860,3 +1826,35 @@ def _cli_param_score():
         else:
             print(f"未知命令: {cmd}")
     
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    if len(sys.argv) < 2:
+        print("用法: python brain.py [explore|regime|auto-tune|rollback|status]")
+        print("  explore    探索未测试的参数空间")
+        print("  regime     学习行情-参数关联")
+        print("  auto-tune  一键全自动（回滚+探索+学习+执行）")
+        print("  rollback   检查并执行参数回滚")
+        print("  status     查看进化状态")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "explore":
+        explore_parameter_space()
+    elif cmd == "regime":
+        build_regime_model()
+    elif cmd == "auto-tune":
+        auto_tune(apply_safe=True)
+    elif cmd == "rollback":
+        check_rollback(apply_revert=True)
+    elif cmd == "status":
+        show_status()
+    else:
+        print(f"未知命令: {cmd}")
+        print("用法: python brain.py [explore|regime|auto-tune|rollback|status]")
+        sys.exit(1)

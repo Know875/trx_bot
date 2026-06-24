@@ -129,6 +129,7 @@ def get_ct_val(ccy: str) -> float:
 GRID_COUNT          = 5
 GRID_RANGE_PCT      = 0.04
 GRID_MIN_PROFIT_PCT = 0.002
+GRID_FLOAT_PROFIT_TARGET = 150.0   # 现货网格浮盈超过此 USDT 时触发止盈平仓
 FUTURES_GRID_MAX_FLOAT_LOSS_PCT = 0.08  # 合约网格持仓浮亏超过本金8%时止损平仓
 # 各币种独立阈值（币种 → 比例），不在此列表的用上面的默认值
 FUTURES_GRID_MAX_FLOAT_LOSS = {
@@ -141,13 +142,13 @@ ETH_SPOT_GRID_RANGE_PCT = 0.162  # was 0.162 → 0.120 回测提示收窄更贴�
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
-ETH_GRID_RANGE_PCT      = 0.12
+ETH_GRID_RANGE_PCT      = 0.162
 
-SOL_SPOT_GRID_RANGE_PCT = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
-SOL_SPOT_GRID_COUNT     = 2
+SOL_SPOT_GRID_RANGE_PCT = 0.046  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
+SOL_SPOT_GRID_COUNT     = 2.0
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
-SOL_GRID_RANGE_PCT      = 0.122  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
+SOL_GRID_RANGE_PCT      = 0.088  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025
@@ -158,8 +159,8 @@ TREND_ATR_STOP_MULT   = 1.5
 TREND_ATR_TP_MULT     = 2.5
 TREND_RSI_OB          = 70
 TREND_RSI_OS          = 30
-ETH_TREND_RSI_OB      = 999
-ETH_TREND_RSI_OS      = 0
+ETH_TREND_RSI_OB      = 999   # ETH做多不过滤超买（趋势强时追涨合理）
+ETH_TREND_RSI_OS      = 20    # ETH做空：RSI<20极度超卖时跳过，防止在反弹前追空
 SOL_TREND_RSI_OB      = 65
 SOL_TREND_RSI_OS      = 35
 
@@ -196,9 +197,11 @@ TRX_COOLDOWN_TICKS      = 12
 TRX_EMA_DIFF_GRID_TO_TREND = 0.008
 TRX_EMA_DIFF_CONFIRM_MIN   = 0.003
 
-# ── TRX 合约专属参数 ───────────────────────────────────────────
+# ── 合约专属仓位参数（futures_trend._position_pct() 读取） ───────
 TRX_SWAP_GRID_POSITION_PCT  = 0.30
-TRX_SWAP_TREND_POSITION_PCT = 0.15
+TRX_SWAP_TREND_POSITION_PCT = 0.15   # TRX 合约趋势：本金15%（低风险）
+SOL_SWAP_TREND_POSITION_PCT = 0.25   # SOL 合约趋势：降至25%（原默认45%止损过大）
+ETH_SWAP_TREND_POSITION_PCT = 0.30   # ETH 合约趋势：降至30%（-105U/-100U止损偏大）
 
 # ── 风控 ──────────────────────────────────────────────────────
 MAX_DRAWDOWN_PCT = 0.10
