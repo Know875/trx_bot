@@ -85,13 +85,53 @@ def test_nonpeek_probation_fail_disables():
     assert KEY in sg._db.data["disabled"]
 
 
-# ── 已禁用：两种模式都只读返回 ───────────────────────────────────
-def test_disabled_is_readonly_both_modes():
+# ── 人工禁用：永久，两种模式都只读返回（不参与冷却） ─────────────
+def test_manual_disabled_is_readonly_both_modes():
+    rec = {"reason": "manual", "manual": True, "since": PAST}
     for pk in (True, False):
-        sg = _sg({"disabled": {KEY: "manual"}})
+        sg = _sg({"disabled": {KEY: rec}})
         r = sg.check("SOL", "trend", peek=pk)
         assert r["mode"] == "disabled"
         assert sg._db.writes == 0
+
+
+# ── 自动禁用：冷却内仍禁用；冷却到期 → 自动转试运行 ───────────────
+def test_auto_disabled_within_cooldown_stays_disabled():
+    rec = {"reason": "试运行结束评分27<40", "manual": False, "since": PAST}  # 刚禁用
+    for pk in (True, False):
+        sg = _sg({"disabled": {KEY: rec}})
+        r = sg.check("SOL", "trend", peek=pk)
+        assert r["mode"] == "disabled"
+        assert sg._db.writes == 0  # 冷却内不推进
+
+def test_auto_disabled_cooldown_expired_enters_probation():
+    from strategy_guard import DISABLE_COOLDOWN_HOURS
+    old = (datetime.now(timezone.utc) - timedelta(hours=DISABLE_COOLDOWN_HOURS + 1)).isoformat()
+    rec = {"reason": "连续3天评分<40", "manual": False, "since": old}
+    # peek：评估为可恢复(probation)，但不写库、不真的恢复
+    sg = _sg({"disabled": {KEY: rec}})
+    r = sg.check("SOL", "trend", peek=True)
+    assert r["mode"] == "probation"
+    assert sg._db.writes == 0
+    assert KEY in sg._db.data["disabled"]
+    # non-peek：真的转入试运行
+    sg = _sg({"disabled": {KEY: rec}})
+    r = sg.check("SOL", "trend", peek=False)
+    assert r["mode"] == "probation"
+    assert KEY not in sg._db.data.get("disabled", {})
+    assert KEY in sg._db.data["probation_until"]
+
+def test_legacy_string_disabled_lazy_migrates_nonpeek_only():
+    # 旧格式(字符串)：peek 只读保持禁用；non-peek 懒迁移盖时间戳但仍禁用
+    sg = _sg({"disabled": {KEY: "试运行结束评分27<40，永久禁用"}})
+    r = sg.check("SOL", "trend", peek=True)
+    assert r["mode"] == "disabled"
+    assert sg._db.writes == 0
+
+    sg = _sg({"disabled": {KEY: "试运行结束评分27<40，永久禁用"}})
+    r = sg.check("SOL", "trend", peek=False)
+    assert r["mode"] == "disabled"            # 迁移当次仍禁用
+    assert sg._db.data["disabled"][KEY]["since"] is not None  # 冷却开始计时
 
 
 # ── P2-2：试运行到期无新评分 → 顺延，不拿过期评分裁决 ─────────────

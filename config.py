@@ -138,17 +138,17 @@ FUTURES_GRID_MAX_FLOAT_LOSS = {
 }
 
 # ── 各币种网格参数（180天回测调优）────────────────────────────
-ETH_SPOT_GRID_RANGE_PCT = 0.162  # was 0.162 → 0.120 回测提示收窄更贴近当前波动
+ETH_SPOT_GRID_RANGE_PCT = 0.162  # AI#10 曾收窄至 0.120，因回测/实盘表现不佳已回退至 0.162
 ETH_SPOT_GRID_COUNT     = 2
 ETH_GRID_COUNT          = 2
 ETH_GRID_POSITION_PCT   = 0.70
 ETH_GRID_RANGE_PCT      = 0.162
 
-SOL_SPOT_GRID_RANGE_PCT = 0.046  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
-SOL_SPOT_GRID_COUNT     = 2.0
+SOL_SPOT_GRID_RANGE_PCT = 0.046  # AI#10 曾扩至 0.122(回测Δ+7.29%)，因实盘表现不佳已回退至 0.046
+SOL_SPOT_GRID_COUNT     = 2
 SOL_GRID_COUNT          = 2
 SOL_GRID_POSITION_PCT   = 0.70
-SOL_GRID_RANGE_PCT      = 0.088  # was 0.046 → 0.122 回测 Δ+7.290% (AI#10)
+SOL_GRID_RANGE_PCT      = 0.088  # AI#10 曾扩至 0.122，现折中回退至 0.088
 
 # ── 趋势参数（180天回测调优）─────────────────────────────────
 TREND_TAKE_PROFIT_PCT = 0.025

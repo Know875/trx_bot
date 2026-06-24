@@ -26,6 +26,7 @@ backtest_data/*.json
 models/
 
 # Runtime state（每台机器各自生成，提交会互相覆盖并泄露盈亏/策略数据）
+reported_*.json
 guard_state.json
 brain_state.json
 evolution_lock.json

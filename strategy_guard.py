@@ -5,9 +5,13 @@
   strategy_score < 25   → 暂停72h，恢复后试运行12h (30%仓位)
   strategy_score < 40   → 暂停24h，恢复后试运行12h (30%仓位)
   连续2天评分 < 40      → 仓位减半
-  连续3天评分 < 40      → 禁用，需人工确认
-  试运行结束评分 < 40   → 永久禁用
+  连续3天评分 < 40      → 禁用，冷却72h后自动重新试运行
+  试运行结束评分 < 40   → 禁用，冷却72h后自动重新试运行
   试运行结束评分 ≥ 50   → 恢复正常
+
+自动禁用不再"永久死亡"：冷却 DISABLE_COOLDOWN_HOURS 后自动转入试运行(30%仓位)
+再给一次机会，避免行情转好后好策略仍被一次坏周期判死。仅 manual_disable()
+为真永久禁用（不参与冷却）。
 
 用法:
   from strategy_guard import StrategyGuard
@@ -48,6 +52,9 @@ PROBATION_HOURS      = 12    # 恢复后试运行时长
 PROBATION_POSITION   = 0.30  # 试运行仓位 30%
 PROBATION_PASS_SCORE = 50    # 试运行结束评分 ≥50 → 恢复正常
 
+# 自动禁用冷却：冷却到期后自动转入试运行再给一次机会（manual_disable 不参与）
+DISABLE_COOLDOWN_HOURS = 72
+
 # 所有策略白名单
 ALL_STRATEGIES = {
     "TRX":      ["trx_adaptive"],
@@ -76,6 +83,18 @@ class StrategyGuard:
         if key in pe:
             pe.pop(key, None)
             self._db.set_json("probation_entry", pe)
+
+    @staticmethod
+    def _disabled_record(reason: str, *, manual: bool, since: str) -> dict:
+        """统一禁用记录结构：{reason, manual, since}。manual=True 不参与自动冷却。"""
+        return {"reason": reason, "manual": manual, "since": since}
+
+    @staticmethod
+    def _norm_disabled(info):
+        """兼容旧格式：历史上 disabled[key] 直接存字符串理由（视为可冷却的自动禁用）。"""
+        if isinstance(info, dict):
+            return dict(info)
+        return {"reason": str(info), "manual": False, "since": None}
 
     @_synchronized
     def update_score(self, coin: str, strategy: str, score: int):
@@ -127,14 +146,49 @@ class StrategyGuard:
 
         result = {"allowed": True, "mode": "normal", "position_mult": 1.0, "reason": ""}
 
-        # ── 1. 永久禁用 ──
+        # ── 1. 禁用（自动禁用可冷却后重试，manual_disable 为真永久） ──
         disabled = self._db.get_json("disabled", {})
+        probation = self._db.get_json("probation_until", {})
         disabled_info = disabled.get(key)
         if disabled_info:
-            return {"allowed": False, "mode": "disabled", "position_mult": 0, "reason": f"策略已禁用: {disabled_info}"}
+            info = self._norm_disabled(disabled_info)
+            reason = info.get("reason", "")
+            # 人工禁用：永久，不冷却
+            if info.get("manual"):
+                return {"allowed": False, "mode": "disabled", "position_mult": 0,
+                        "reason": f"策略已禁用: {reason}"}
+            since_str = info.get("since")
+            if since_str is None:
+                # 旧格式无时间戳：懒迁移，从现在起开始计冷却（本次仍禁用）
+                if not peek:
+                    info["since"] = now.isoformat()
+                    disabled[key] = info
+                    self._db.set_json("disabled", disabled)
+                return {"allowed": False, "mode": "disabled", "position_mult": 0,
+                        "reason": f"策略已禁用: {reason}（冷却{DISABLE_COOLDOWN_HOURS}h后重试）"}
+            since = datetime.fromisoformat(since_str.replace("Z", "+00:00"))
+            cooldown_end = since + timedelta(hours=DISABLE_COOLDOWN_HOURS)
+            if now < cooldown_end:
+                remaining_h = (cooldown_end - now).total_seconds() / 3600
+                return {"allowed": False, "mode": "disabled", "position_mult": 0,
+                        "reason": f"策略已禁用: {reason}（冷却剩余{remaining_h:.1f}h）"}
+            # 冷却到期 → 转入试运行再给一次机会
+            if not peek:
+                del disabled[key]
+                self._db.set_json("disabled", disabled)
+                probation[key] = (now + timedelta(hours=PROBATION_HOURS)).isoformat()
+                self._db.set_json("probation_until", probation)
+                pe = self._db.get_json("probation_entry", {})
+                pe[key] = self._db.get_json("last_score", {}).get(key)
+                self._db.set_json("probation_entry", pe)
+                cb = self._db.get_json("consecutive_bad", {})
+                cb[key] = 0
+                self._db.set_json("consecutive_bad", cb)
+                logger.info(f"🔄 {key} 禁用冷却结束，自动进入 {PROBATION_HOURS}h 试运行 ({PROBATION_POSITION:.0%}仓位)")
+            return {"allowed": True, "mode": "probation", "position_mult": PROBATION_POSITION,
+                    "reason": f"禁用冷却结束，自动试运行 ({PROBATION_POSITION:.0%}仓位)，{PROBATION_HOURS}h 后评估"}
 
         # ── 2. 试运行（复检期） ──
-        probation = self._db.get_json("probation_until", {})
         probation_until_str = probation.get(key)
         if probation_until_str:
             probation_until = datetime.fromisoformat(probation_until_str.replace("Z", "+00:00"))
@@ -161,10 +215,12 @@ class StrategyGuard:
                         del probation[key]
                         self._db.set_json("probation_until", probation)
                         self._clear_probation_entry(key)
-                        disabled[key] = f"试运行结束评分{last}<{SCORE_PAUSE_24H}，永久禁用"
+                        disabled[key] = self._disabled_record(
+                            f"试运行结束评分{last}<{SCORE_PAUSE_24H}",
+                            manual=False, since=now.isoformat())
                         self._db.set_json("disabled", disabled)
                     return {"allowed": False, "mode": "disabled", "position_mult": 0,
-                            "reason": f"试运行失败: 评分{last}<{SCORE_PAUSE_24H}，已永久禁用"}
+                            "reason": f"试运行失败: 评分{last}<{SCORE_PAUSE_24H}，禁用(冷却{DISABLE_COOLDOWN_HOURS}h后重试)"}
                 # 通过/观察 → 恢复正常（cb 归零后即落入 normal，等价于原 fall-through）
                 if not peek:
                     del probation[key]
@@ -210,12 +266,14 @@ class StrategyGuard:
 
         if cb_val >= CONSECUTIVE_DISABLE:
             if not peek:
-                disabled[key] = f"连续{cb_val}天评分<{SCORE_PAUSE_24H}，自动禁用"
+                disabled[key] = self._disabled_record(
+                    f"连续{cb_val}天评分<{SCORE_PAUSE_24H}",
+                    manual=False, since=now.isoformat())
                 self._db.set_json("disabled", disabled)
                 cb[key] = 0
                 self._db.set_json("consecutive_bad", cb)
             return {"allowed": False, "mode": "disabled", "position_mult": 0,
-                    "reason": f"连续{cb_val}天低评分，已禁用"}
+                    "reason": f"连续{cb_val}天低评分，禁用(冷却{DISABLE_COOLDOWN_HOURS}h后重试)"}
 
         if cb_val >= CONSECUTIVE_REDUCE:
             return {"allowed": True, "mode": "reduced", "position_mult": POSITION_REDUCTION,
@@ -272,8 +330,9 @@ class StrategyGuard:
     def manual_disable(self, coin: str, strategy: str, reason: str = "人工禁用"):
         """强制禁用策略"""
         key = self._key(coin, strategy)
+        now = datetime.now(timezone.utc)
         disabled = self._db.get_json("disabled", {})
-        disabled[key] = reason
+        disabled[key] = self._disabled_record(reason, manual=True, since=now.isoformat())
         self._db.set_json("disabled", disabled)
         paused = self._db.get_json("paused_until", {})
         paused.pop(key, None)
@@ -281,7 +340,7 @@ class StrategyGuard:
         probation = self._db.get_json("probation_until", {})
         probation.pop(key, None)
         self._db.set_json("probation_until", probation)
-        logger.info(f"🚫 人工禁用 {key}: {reason}")
+        logger.info(f"🚫 人工禁用 {key} (永久): {reason}")
 
     @staticmethod
     def _get_coin_strategies(coin: str) -> list:
