@@ -1135,14 +1135,6 @@ def run_swap_coin(ccy: str, stop_event: threading.Event):
 
                 logger.info(tracker.summary())
 
-                # 同步策略贡献报表 + 账户守护者（合约）
-                # 同步策略贡献报表 + 账户守护者（swap）
-                _rep_file = f"reported_{ccy.replace('-','_')}.json"
-                try:
-                    with open(_rep_file) as f:
-                        reported = set(json.load(f))
-                except:
-                    reported = set()
                 # 同步策略贡献报表 + 账户守护者（swap）
                 _rep_file = f"reported_{ccy.replace('-','_')}.json"
                 try:
@@ -1654,7 +1646,6 @@ def main():
         import time as _time
         while True:
             try:
-                Path(__file__).parent / ".bot_heartbeat"
                 (Path(__file__).parent / ".bot_heartbeat").touch()
             except:
                 pass

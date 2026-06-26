@@ -78,7 +78,7 @@ def test_can_evolve_extreme_mock():
     except OSError:
         pass
 
-    with patch("param_score.is_extreme_market") as mock_extreme:
+    with patch("brain.is_extreme_market") as mock_extreme:
         mock_extreme.return_value = {
             "is_extreme": True,
             "reasons": ["BTC 24h -10%"]
@@ -99,7 +99,7 @@ def test_can_evolve_normal_mock():
     except OSError:
         pass
 
-    with patch("param_score.is_extreme_market") as mock_extreme:
+    with patch("brain.is_extreme_market") as mock_extreme:
         mock_extreme.return_value = {"is_extreme": False, "reasons": []}
         ok, reason = evolution_lock.can_evolve("explore")
         assert ok is True, f"explore should be allowed in normal: {reason}"
@@ -114,7 +114,7 @@ def test_can_evolve_account_guard_protect():
     except OSError:
         pass
 
-    with patch("param_score.is_extreme_market") as mock_extreme:
+    with patch("brain.is_extreme_market") as mock_extreme:
         mock_extreme.return_value = {"is_extreme": False, "reasons": []}
         with patch("account_guard.Guard.check") as mock_guard:
             mock_guard.return_value = {"status": "protect", "mode": "protect"}

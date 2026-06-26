@@ -21,13 +21,19 @@ class FuturesGridStrategy:
         self.grid_count = int(grid_count)
         self.capital = capital  # USDT 本金
         self.symbol = symbol
-        # 币种键，与 config.COIN_CONFIG 对应 ("TRX_SWAP", "ETH_SWAP", "SOL_SWAP")
+        # 币种键，与 config.COIN_CONFIG 对应 ("TRX_SWAP", "ETH_SWAP", "SOL_SWAP")。
+        # 调用方（main.py）传入的是币种键本身（symbol=ccy="ETH_SWAP"），优先直接采用；
+        # 仅当传入的是交易对符号（"ETH-USDT-SWAP"）时才反查。两者口径不分会导致
+        # _coin 恒为空 → SWAP_POSITION_CAP_PCT 仓位上限静默失效。
         self._coin = ""
         if symbol:
-            for k, v in config.COIN_CONFIG.items():
-                if v.get("symbol") == symbol:
-                    self._coin = k
-                    break
+            if symbol in config.COIN_CONFIG:
+                self._coin = symbol
+            else:
+                for k, v in config.COIN_CONFIG.items():
+                    if v.get("symbol") == symbol:
+                        self._coin = k
+                        break
 
         self.grid_prices = []
         self.buy_orders = {}   # price → {"order_id", "contracts"}

@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-06-26 整体复审（CI 失效 + 合约网格仓位上限静默失效）
+
+端到端复审。核心资金/风控链（多级熔断、SQLite WAL、strategy_guard peek 只读、
+单调收紧）核对正确。发现并修复 3 个真问题 + 2 项清理。
+
+**🔴 已修 — CI 一直是红的，安全网没在跑**
+`param_score.py` 已并入 `brain.py`（见 brain.py「merged from param_score.py」）并删文件，
+但 `.github/workflows/ci.yml` 语法检查步仍 `python -m py_compile param_score.py`（无 `|| true`）
+→ 每次 CI 在该步 `[Errno 2] No such file` 直接失败，后续 pytest 根本没机会判定。
+本仓库反复强调的「测试 + CI 兜底」实际断裂——下面两个回归正因此没被自动拦住。
+修复：从 CI 列表删除该行（brain.py 已单独 py_compile）。
+
+**🔴 已修 — `tests/test_evolution_lock.py` patch 了已不存在的模块**
+3 处 `patch("param_score.is_extreme_market")`，但 `import param_score` 现已 ModuleNotFoundError
+（符号搬到 `brain.py`，`evolution_lock` 在调用时 `from brain import is_extreme_market`）。
+修复：patch 目标改为 `brain.is_extreme_market`。
+
+**🔴 已修 — 合约网格仓位上限静默失效（ETH_SWAP 裸奔）**
+`FuturesGridStrategy._coin` 用「反查 COIN_CONFIG[*].symbol == 入参」解析，但三处构造点
+（main.py 的 ranging 启动 / 停滞重组 / 连亏回退）都传 `symbol=ccy`=币种键（"ETH_SWAP"），
+与配置里的交易对符号（"ETH-USDT-SWAP"）永不相等 → `self._coin` 恒为空 →
+所有 `if self._coin:` 守卫的 `SWAP_POSITION_CAP_PCT`（0.6/0.5/0.4×本金市值上限）成死代码。
+SOL_SWAP 尚有 `_max_entries=3` 兜底，**ETH_SWAP 既无档位上限又无市值上限**，唯一保护是
+12% 浮亏止损。这是 2026-06-10「config 取值口径对了但调用方没同步」教训的同类新实例。
+修复：`_coin` 解析优先「入参直接是 COIN_CONFIG 键则采用」，否则才反查交易对符号（兼容两种口径）。
+新增 `tests/test_futures_grid_cap.py`：锁定 _coin 解析 + start() 超仓位上限不挂买单（补上 CI 漏掉的集成点）。
+
+**🔸 已修（清理）**
+- `main.py` 当日交易上报块：`reported` 集合读取 + 去重整段复制粘贴了两遍（第一遍结果被第二遍覆盖），删去冗余一份。
+- `main.py` 启动阻断心跳：一行无效语句 `Path(__file__).parent / ".bot_heartbeat"`（构造路径但丢弃），删除。
+
+**遗留（未改，文档漂移）**：README 为空；本文件「测量优先」段指引的 `measure.py / edge_research.py /
+optimize.py` 已不存在（功能并入 `system_status.py` / `backtest_calibrate.py` / `brain.py`），照抄会 No such file。
+
+---
+
 ## 2026-06-10 复审（Web 安全 + 杠杆链路 + carry 对冲）
 
 对全新拉取的最新版（`6af5664`）做端到端复审，重点 Web 安全、合约杠杆落地、本次新改的网格间距死循环逻辑。**核心资金链（资金乘数、熔断单调性、浮亏纳入回撤、carry 回滚、网格回退）核对正确**；发现并修复 3 项问题 + 1 次要项。

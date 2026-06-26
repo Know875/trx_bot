@@ -40,7 +40,6 @@ jobs:
           python -m py_compile strategy_guard.py
           python -m py_compile strategy_report.py
           python -m py_compile brain.py
-          python -m py_compile param_score.py
           python -m py_compile state_db.py
           python -m py_compile tracker.py
           python -m py_compile okx_client.py
