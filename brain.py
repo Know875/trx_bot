@@ -443,12 +443,21 @@ def auto_tune(apply_safe=True):
     ok, reason = can_evolve("brain.py auto-tune")
     if not ok:
         # 只做防守
-        check_rollback(apply_revert=True)
+        reverted = check_rollback(apply_revert=True)
         print(f"\n{'█'*60}")
         print(f"█  ⚠️ 进化引擎已锁定: {reason}")
         print(f"█  仅允许: 回滚 / 止损 / 降仓 / 冷却 / 熔断")
         print(f"█  已禁止: 探索 / 写入config / promote / 扩仓")
         print(f"{'█'*60}")
+        # 回滚参数落地后自动重启
+        if reverted:
+            print("🔄 回滚参数已写入，自动重启 bot...")
+            import subprocess
+            try:
+                subprocess.run(["systemctl", "restart", "trx-bot.service"], timeout=15)
+                print("✅ Bot 已重启，回滚生效")
+            except Exception as e:
+                print(f"⚠️ 重启失败: {e}")
         return {
             "locked": True,
             "reason": reason,
@@ -486,6 +495,15 @@ def auto_tune(apply_safe=True):
         if findings:
             print(f"\n  ℹ️ 有 {len(findings)} 个潜力组合，但未通过安全验证。")
             print(f"     可运行 `python brain.py explore` 查看详情。")
+        # 即使无新决策，回滚参数也需重启生效
+        if reverted:
+            print("🔄 仅回滚参数变更，自动重启 bot...")
+            import subprocess
+            try:
+                subprocess.run(["systemctl", "restart", "trx-bot.service"], timeout=15)
+                print("✅ Bot 已重启，回滚生效")
+            except Exception as e:
+                print(f"⚠️ 重启失败: {e}")
         return
 
     applied = []
@@ -514,6 +532,18 @@ def auto_tune(apply_safe=True):
     _save_state(state)
 
     print(f"\n✅ 本次应用 {len(applied)} 条 | 智慧库积累 {state['total_explored']} 个参数组合")
+
+    # 参数写入 config.py 后自动重启 bot 使新参生效
+    any_change = applied or reverted
+    if any_change:
+        print("🔄 参数已写入，自动重启 bot...")
+        import subprocess
+        try:
+            subprocess.run(["systemctl", "restart", "trx-bot.service"], timeout=15)
+            print("✅ Bot 已重启，新参数生效")
+        except Exception as e:
+            print(f"⚠️ 重启失败: {e}（请手动 systemctl restart trx-bot.service）")
+
     return applied
 
 
